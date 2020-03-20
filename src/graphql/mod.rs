@@ -1,6 +1,6 @@
 mod model;
 
-pub use model::QueryRoot;
+pub use model::{QueryRoot, SubscriptionRoot};
 
 pub struct Data {
   online: i32
