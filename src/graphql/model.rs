@@ -8,7 +8,7 @@ pub struct ServerInfo {
 impl ServerInfo {
   #[field(desc = "The number of online clients")]
   async fn online(&self, ctx: &Context<'_>) -> i32 {
-    ctx.data::<Data>().online
+    ctx.data::<Data>().online().await
   }
 }
 
