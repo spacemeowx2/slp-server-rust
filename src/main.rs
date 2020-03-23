@@ -10,6 +10,21 @@ use juniper_subscriptions::Coordinator;
 use std::pin::Pin;
 use futures::{Future, FutureExt as _};
 use std::sync::Arc;
+use serde::Serialize;
+use std::convert::Infallible;
+
+#[derive(Serialize)]
+struct Info {
+    online: i32,
+    version: String,
+}
+
+async fn server_info(udp_server: UDPServer) -> Result<impl warp::Reply, Infallible> {
+    Ok(warp::reply::json(&Info {
+        online: udp_server.online().await,
+        version: std::env!("CARGO_PKG_VERSION").to_owned(),
+    }))
+}
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -20,6 +35,7 @@ async fn main() -> std::io::Result<()> {
     let udp_server = UDPServer::new(bind_address.clone()).await?;
     let s1 = udp_server.clone();
     let s2 = udp_server.clone();
+    let s3 = udp_server.clone();
 
     log::info!("Listening on {}", bind_address);
 
@@ -47,6 +63,10 @@ async fn main() -> std::io::Result<()> {
         .map(|reply| {
             warp::reply::with_header(reply, "Sec-WebSocket-Protocol", "graphql-ws")
         })
+    .or(warp::path("info")
+        .and(warp::any().map(move || s3.clone()))
+        .and_then(server_info)
+    )
     .or(warp::get()
         .and(juniper_warp::playground_filter("/", Some("/"))))
     .or(warp::post()

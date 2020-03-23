@@ -1,6 +1,6 @@
 use juniper::{EmptyMutation, FieldError, RootNode};
 use crate::slp::UDPServer;
-use std::{pin::Pin, sync::Arc, time::Duration};
+use std::{pin::Pin, time::Duration};
 use futures::Stream;
 
 #[derive(Clone)]
@@ -19,6 +19,10 @@ impl ServerInfo {
     /// The number of online clients
     async fn online(context: &Context) -> i32 {
         context.udp_server.online().await
+    }
+    /// The version of the server
+    async fn version() -> String {
+        std::env!("CARGO_PKG_VERSION").to_owned()
     }
 }
 

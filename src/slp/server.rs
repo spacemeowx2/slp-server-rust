@@ -1,6 +1,6 @@
 use tokio::io::Result;
-use tokio::net::{UdpSocket, udp::{ RecvHalf, SendHalf }};
-use tokio::sync::{RwLock, mpsc, oneshot};
+use tokio::net::{UdpSocket, udp::RecvHalf};
+use tokio::sync::{RwLock, mpsc};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
