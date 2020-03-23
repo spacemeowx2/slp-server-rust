@@ -939,6 +939,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "juniper_subscriptions"
+version = "0.14.2"
+source = "git+https://github.com/graphql-rust/juniper#cab6decdbc54f55692c205bd34f92a8d493a5fe7"
+dependencies = [
+ "futures 0.3.1",
+ "juniper",
+]
+
+[[package]]
 name = "juniper_warp"
 version = "0.5.2"
 source = "git+https://github.com/graphql-rust/juniper#cab6decdbc54f55692c205bd34f92a8d493a5fe7"
@@ -946,6 +955,7 @@ dependencies = [
  "failure",
  "futures 0.3.1",
  "juniper",
+ "juniper_subscriptions",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1876,6 +1886,7 @@ dependencies = [
  "futures 0.3.1",
  "juniper",
  "juniper_codegen",
+ "juniper_subscriptions",
  "juniper_warp",
  "log 0.4.8",
  "lru",
