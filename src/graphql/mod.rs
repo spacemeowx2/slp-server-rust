@@ -1,3 +1,3 @@
 mod model;
 
-pub use model::{QueryRoot, SubscriptionRoot};
+pub use model::*;

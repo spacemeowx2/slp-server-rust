@@ -1,29 +1,46 @@
 mod graphql;
 mod slp;
 
-use actix_web::{web, App, HttpServer};
-use async_graphql::{EmptyMutation, Schema};
 use slp::UDPServer;
 use async_std::sync::{Arc, RwLock};
 use async_std::task;
+use warp::{http::Response, Filter};
+use graphql::{schema, Context};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-#[actix_rt::main]
+#[tokio::main]
 async fn main() -> std::io::Result<()> {
+  env_logger::init();
+
+  let log = warp::log("warp_server");
+
   let port: u16 = 11451;
   let bind_address = format!("{}:{}", "0.0.0.0", port);
 
-  HttpServer::new(move || {
-    let udp_server = Arc::new(RwLock::new(UDPServer::new()));
-    let schema =
-      Schema::new(graphql::QueryRoot, EmptyMutation, graphql::SubscriptionRoot)
-      .data(udp_server);
-    let handler = async_graphql_actix_web::HandlerBuilder::new(schema)
-      .enable_ui(&format!("http://localhost:{}", port), Some(&format!("ws://localhost:{}", port)))
-      .enable_subscription()
-      .build();
-    App::new().service(web::resource("/").to(handler))
-  })
-  .bind(&bind_address)?
-  .run()
-  .await
+  let homepage = warp::path::end().map(|| {
+    Response::builder()
+        .header("content-type", "text/html")
+        .body(format!(
+            "<html><h1>juniper_warp</h1><div>visit <a href=\"/graphiql\">/graphiql</a></html>"
+        ))
+  });
+
+  log::info!("Listening on {}", bind_address);
+
+    let state = warp::any().map(move || Context{} );
+    let graphql_filter = juniper_warp::make_graphql_filter(schema(), state.boxed());
+    let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
+
+    warp::serve(
+        warp::get()
+            .and(warp::path("graphiql"))
+            .and(juniper_warp::graphiql_filter("/graphql"))
+            .or(homepage)
+            .or(warp::path("graphql").and(graphql_filter))
+            .with(log),
+    )
+    .run(*socket_addr)
+    .await;
+
+    Ok(())
 }

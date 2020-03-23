@@ -1,32 +1,37 @@
-use async_graphql::Context;
-use crate::slp::SharedUDPServer;
-pub struct ServerInfo {
+use juniper::{EmptyMutation, EmptySubscription, RootNode};
+
+#[derive(Clone)]
+pub struct Context {
+
+}
+impl juniper::Context for Context {}
+
+struct ServerInfo {
 }
 
-#[async_graphql::Object(desc = "Infomation about this server")]
+/// Infomation about this server
+#[juniper::graphql_object(
+    Context = Context,
+)]
 impl ServerInfo {
-  #[field(desc = "The number of online clients")]
-  async fn online(&self, ctx: &Context<'_>) -> i32 {
-    ctx.data::<SharedUDPServer>().read().await.online()
-  }
-}
-
-pub struct QueryRoot;
-
-#[async_graphql::Object(desc = "Queryroot")]
-impl QueryRoot {
-  #[field(desc = "Infomation about this server")]
-  async fn server_info(&self, _ctx: &Context<'_>) -> ServerInfo {
-    ServerInfo{}
-  }
-}
-
-pub struct SubscriptionRoot;
-
-#[async_graphql::Subscription]
-impl SubscriptionRoot {
-    #[field]
-    fn server_info(&self, _server_info: &ServerInfo) -> bool {
-        true
+    /// The number of online clients
+    fn online(&self) -> i32 {
+        0
     }
+}
+
+pub struct Query;
+
+#[juniper::graphql_object(Context = Context)]
+impl Query {
+    /// Infomation about this server
+    async fn server_info() -> ServerInfo {
+        ServerInfo{}
+    }
+}
+
+type Schema = RootNode<'static, Query, EmptyMutation<Context>, EmptySubscription<Context>>;
+
+pub fn schema() -> Schema {
+    Schema::new(Query, EmptyMutation::<Context>::new(), EmptySubscription::<Context>::new())
 }
