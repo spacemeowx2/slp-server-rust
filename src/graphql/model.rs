@@ -1,7 +1,7 @@
-use juniper::{EmptyMutation, EmptySubscription, FieldError, RootNode};
+use juniper::{EmptyMutation, FieldError, RootNode};
 use crate::slp::UDPServer;
 use std::{pin::Pin, sync::Arc, time::Duration};
-use futures::{Future, FutureExt as _, Stream};
+use futures::Stream;
 
 #[derive(Clone)]
 pub struct Context {
@@ -17,8 +17,8 @@ struct ServerInfo {}
 )]
 impl ServerInfo {
     /// The number of online clients
-    fn online(&self) -> i32 {
-        0
+    async fn online(context: &Context) -> i32 {
+        context.udp_server.online().await
     }
 }
 
@@ -40,7 +40,9 @@ pub struct Subscription;
 impl Subscription {
     /// Infomation about this server
     async fn server_info() -> ServerInfoStream {
-        let stream = tokio::time::interval(Duration::from_secs(1)).map(move |_| {
+        let stream = tokio::time::interval(
+            Duration::from_secs(5)
+        ).map(move |_| {
             Ok(ServerInfo {})
         });
 

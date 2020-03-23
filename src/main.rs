@@ -1,16 +1,15 @@
 mod graphql;
 mod slp;
 
-use async_std::sync::{Arc, RwLock};
-use async_std::task;
 use graphql::{schema, Context};
 use slp::UDPServer;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use warp::{http::Response, Filter};
+use std::net::SocketAddr;
+use warp::Filter;
 use juniper_warp::subscriptions::graphql_subscriptions;
 use juniper_subscriptions::Coordinator;
-use std::{pin::Pin, time::Duration};
-use futures::{Future, FutureExt as _, Stream};
+use std::pin::Pin;
+use futures::{Future, FutureExt as _};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -18,7 +17,7 @@ async fn main() -> std::io::Result<()> {
 
     let port: u16 = 11451;
     let bind_address = format!("{}:{}", "0.0.0.0", port);
-    let udp_server = UDPServer::new();
+    let udp_server = UDPServer::new(bind_address.clone());
     let s1 = udp_server.clone();
     let s2 = udp_server.clone();
 
