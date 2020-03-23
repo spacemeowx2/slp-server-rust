@@ -1,6 +1,5 @@
-use super::Data;
 use async_graphql::Context;
-
+use crate::slp::SharedUDPServer;
 pub struct ServerInfo {
 }
 
@@ -8,7 +7,7 @@ pub struct ServerInfo {
 impl ServerInfo {
   #[field(desc = "The number of online clients")]
   async fn online(&self, ctx: &Context<'_>) -> i32 {
-    ctx.data::<Data>().online().await
+    ctx.data::<SharedUDPServer>().read().await.online()
   }
 }
 
