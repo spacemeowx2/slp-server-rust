@@ -21,8 +21,8 @@ impl ServerInfo {
         context.udp_server.online().await
     }
     /// The version of the server
-    async fn version() -> String {
-        std::env!("CARGO_PKG_VERSION").to_owned()
+    async fn version() -> &str {
+        std::env!("CARGO_PKG_VERSION")
     }
 }
 
