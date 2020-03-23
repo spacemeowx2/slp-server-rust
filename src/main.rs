@@ -17,7 +17,7 @@ async fn main() -> std::io::Result<()> {
 
     let port: u16 = 11451;
     let bind_address = format!("{}:{}", "0.0.0.0", port);
-    let udp_server = UDPServer::new(bind_address.clone());
+    let udp_server = UDPServer::new(bind_address.clone()).await?;
     let s1 = udp_server.clone();
     let s2 = udp_server.clone();
 
