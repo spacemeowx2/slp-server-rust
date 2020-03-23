@@ -1,13 +1,10 @@
 use juniper::{EmptyMutation, EmptySubscription, RootNode};
 
 #[derive(Clone)]
-pub struct Context {
-
-}
+pub struct Context {}
 impl juniper::Context for Context {}
 
-struct ServerInfo {
-}
+struct ServerInfo {}
 
 /// Infomation about this server
 #[juniper::graphql_object(
@@ -26,12 +23,16 @@ pub struct Query;
 impl Query {
     /// Infomation about this server
     async fn server_info() -> ServerInfo {
-        ServerInfo{}
+        ServerInfo {}
     }
 }
 
 type Schema = RootNode<'static, Query, EmptyMutation<Context>, EmptySubscription<Context>>;
 
 pub fn schema() -> Schema {
-    Schema::new(Query, EmptyMutation::<Context>::new(), EmptySubscription::<Context>::new())
+    Schema::new(
+        Query,
+        EmptyMutation::<Context>::new(),
+        EmptySubscription::<Context>::new(),
+    )
 }
