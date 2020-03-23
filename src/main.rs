@@ -45,6 +45,9 @@ async fn main() -> std::io::Result<()> {
                 })
             },
         ))
+        .map(|reply| {
+            warp::reply::with_header(reply, "Sec-WebSocket-Protocol", "graphql-ws")
+        })
     .or(warp::get()
         .and(juniper_warp::playground_filter("/", Some("/"))))
     .or(warp::post()
