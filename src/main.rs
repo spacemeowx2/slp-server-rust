@@ -1,17 +1,15 @@
 mod graphql;
 mod slp;
+mod graphql_ws_filter;
 
 use graphql::{schema, Context};
 use slp::UDPServer;
 use std::net::SocketAddr;
 use warp::Filter;
-use juniper_warp::subscriptions::graphql_subscriptions;
-use juniper_subscriptions::Coordinator;
-use std::pin::Pin;
-use futures::{Future, FutureExt as _};
-use std::sync::Arc;
 use serde::Serialize;
 use std::convert::Infallible;
+use graphql_ws_filter::make_graphql_ws_filter;
+use warp::filters::BoxedFilter;
 
 #[derive(Serialize)]
 struct Info {
@@ -19,11 +17,16 @@ struct Info {
     version: String,
 }
 
-async fn server_info(udp_server: UDPServer) -> Result<impl warp::Reply, Infallible> {
+async fn server_info(context: Context) -> Result<impl warp::Reply, Infallible> {
     Ok(warp::reply::json(&Info {
-        online: udp_server.online().await,
+        online: context.udp_server.online().await,
         version: std::env!("CARGO_PKG_VERSION").to_owned(),
     }))
+}
+
+fn make_state(udp_server: &UDPServer) -> BoxedFilter<(Context,)> {
+    let udp_server = udp_server.clone();
+    warp::any().map(move || Context { udp_server: udp_server.clone() }).boxed()
 }
 
 #[tokio::main]
@@ -32,39 +35,20 @@ async fn main() -> std::io::Result<()> {
 
     let port: u16 = 11451;
     let bind_address = format!("{}:{}", "0.0.0.0", port);
-    let udp_server = UDPServer::new(bind_address.clone()).await?;
-    let s1 = udp_server.clone();
-    let s2 = udp_server.clone();
-    let s3 = udp_server.clone();
+    let udp_server = UDPServer::new(&bind_address).await?;
 
     log::info!("Listening on {}", bind_address);
 
-    let state = warp::any().map(move || Context { udp_server: s1.clone() });
-    let graphql_filter = juniper_warp::make_graphql_filter(schema(), state.boxed());
-    let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
+    let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&udp_server));
+    let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&udp_server));
 
-    let sub_state = warp::any().map(move || Context { udp_server: s2.clone() });
-    let coordinator = Arc::new(juniper_subscriptions::Coordinator::new(schema()));
+    let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
 
     let log = warp::log("warp_server");
     let routes = (warp::get()
-        .and(warp::ws())
-        .and(sub_state.clone())
-        .and(warp::any().map(move || Arc::clone(&coordinator)))
-        .map(
-            |ws: warp::ws::Ws,
-             ctx: Context,
-             coordinator: Arc<Coordinator<'static, _, _, _, _, _>>| {
-                ws.on_upgrade(|websocket| -> Pin<Box<dyn Future<Output = ()> + Send>> {
-                    graphql_subscriptions(websocket, coordinator, ctx).boxed()
-                })
-            },
-        ))
-        .map(|reply| {
-            warp::reply::with_header(reply, "Sec-WebSocket-Protocol", "graphql-ws")
-        })
+        .and(graphql_ws_filter))
     .or(warp::path("info")
-        .and(warp::any().map(move || s3.clone()))
+        .and(make_state(&udp_server))
         .and_then(server_info)
     )
     .or(warp::get()

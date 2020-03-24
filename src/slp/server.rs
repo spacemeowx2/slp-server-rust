@@ -74,7 +74,7 @@ pub struct UDPServer {
 
 type Packet = (SocketAddr, Vec<u8>);
 impl UDPServer {
-    pub async fn new(addr: String) -> Result<Self> {
+    pub async fn new(addr: &str) -> Result<Self> {
         let inner = Arc::new(RwLock::new(InnerServer::new()));
         let inner2 = inner.clone();
         let inner3 = inner.clone();
