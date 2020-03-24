@@ -1,7 +1,7 @@
 use juniper::{EmptyMutation, FieldError, RootNode};
 use crate::slp::UDPServer;
 use std::{pin::Pin, time::Duration};
-use futures::Stream;
+use futures::{Stream, future, Future};
 
 #[derive(Clone)]
 pub struct Context {
@@ -9,7 +9,18 @@ pub struct Context {
 }
 impl juniper::Context for Context {}
 
-struct ServerInfo {}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ServerInfo {
+    online: i32,
+}
+
+impl ServerInfo {
+    async fn new(context: &Context) -> ServerInfo {
+        ServerInfo {
+            online: context.udp_server.online().await
+        }
+    }
+}
 
 /// Infomation about this server
 #[juniper::graphql_object(
@@ -17,11 +28,11 @@ struct ServerInfo {}
 )]
 impl ServerInfo {
     /// The number of online clients
-    async fn online(context: &Context) -> i32 {
-        context.udp_server.online().await
+    async fn online(&self) -> i32 {
+        self.online
     }
     /// The version of the server
-    async fn version() -> &str {
+    fn version() -> &str {
         std::env!("CARGO_PKG_VERSION")
     }
 }
@@ -31,8 +42,8 @@ pub struct Query;
 #[juniper::graphql_object(Context = Context)]
 impl Query {
     /// Infomation about this server
-    async fn server_info() -> ServerInfo {
-        ServerInfo {}
+    async fn server_info(context: &Context) -> ServerInfo {
+        ServerInfo::new(context).await
     }
 }
 
@@ -43,12 +54,29 @@ pub struct Subscription;
 #[juniper::graphql_subscription(Context = Context)]
 impl Subscription {
     /// Infomation about this server
-    async fn server_info() -> ServerInfoStream {
+    async fn server_info(context: &Context) -> ServerInfoStream {
+        let context = context.clone();
+        let state: Option<ServerInfo> = None;
+
         let stream = tokio::time::interval(
-            Duration::from_secs(5)
-        ).map(move |_| {
-            Ok(ServerInfo {})
-        });
+            Duration::from_secs(1)
+        )
+        .then(move |_| {
+            let context = context.clone();
+            async move {
+                ServerInfo::new(&context.clone()).await
+            }
+        })
+        .scan(state, |state, x|
+            future::ready(Some(if state.as_ref() == Some(&x) {
+                None
+            } else {
+                *state = Some(x.clone());
+                Some(x)
+            }))
+        )
+        .filter_map(|x| future::ready(x))
+        .map(|info| Ok(info));
 
         Box::pin(stream)
     }
