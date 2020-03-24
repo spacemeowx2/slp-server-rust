@@ -1,7 +1,8 @@
 use juniper::{EmptyMutation, FieldError, RootNode};
 use crate::slp::UDPServer;
 use std::{pin::Pin, time::Duration};
-use futures::{Stream, future, Future};
+use futures::Stream;
+use super::filter_same::FilterSameExt;
 
 #[derive(Clone)]
 pub struct Context {
@@ -67,15 +68,7 @@ impl Subscription {
                 ServerInfo::new(&context.clone()).await
             }
         })
-        .scan(state, |state, x|
-            future::ready(Some(if state.as_ref() == Some(&x) {
-                None
-            } else {
-                *state = Some(x.clone());
-                Some(x)
-            }))
-        )
-        .filter_map(|x| future::ready(x))
+        .filter_same()
         .map(|info| Ok(info));
 
         Box::pin(stream)
