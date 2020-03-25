@@ -1,7 +1,7 @@
 use juniper::{EmptyMutation, FieldError, RootNode};
 use crate::slp::UDPServer;
 use std::{pin::Pin, time::Duration};
-use futures::Stream;
+use futures::{Stream, stream::BoxStream};
 use super::filter_same::FilterSameExt;
 
 #[derive(Clone)]
@@ -48,7 +48,7 @@ impl Query {
     }
 }
 
-type ServerInfoStream = Pin<Box<dyn Stream<Item = Result<ServerInfo, FieldError>> + Send>>;
+type ServerInfoStream = BoxStream<'static, Result<ServerInfo, FieldError>>;
 
 pub struct Subscription;
 
@@ -59,19 +59,18 @@ impl Subscription {
         let context = context.clone();
         let state: Option<ServerInfo> = None;
 
-        let stream = tokio::time::interval(
+        tokio::time::interval(
             Duration::from_secs(1)
         )
         .then(move |_| {
             let context = context.clone();
             async move {
-                ServerInfo::new(&context.clone()).await
+                ServerInfo::new(&context).await
             }
         })
         .filter_same()
-        .map(|info| Ok(info));
-
-        Box::pin(stream)
+        .map(|info| Ok(info))
+        .boxed()
     }
 }
 
