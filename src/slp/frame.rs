@@ -10,8 +10,10 @@ mod forwarder_type {
 }
 mod field {
     pub type Field = ::core::ops::Range<usize>;
-    pub type Rest  = ::core::ops::RangeFrom<usize>;
-    pub const SRC_DEST: Field = 12..16;
+    pub const SRC_IP: Field = 12..16;
+    pub const DST_IP: Field = 16..20;
+    pub const FRAG_SRC_IP: Field = 0..4;
+    pub const FRAG_DST_IP: Field = 4..8;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -56,7 +58,7 @@ pub enum ForwarderFrame<'a> {
     Keepalive,
     Ipv4(Ipv4<'a>),
     Ping(Ping<'a>),
-    Ipv4Frag,
+    Ipv4Frag(Ipv4Frag<'a>),
     AuthMe,
     Info,
 }
@@ -70,7 +72,7 @@ impl<'a> Parser<'a> for ForwarderFrame<'a> {
             forwarder_type::KEEPALIVE => ForwarderFrame::Keepalive,
             forwarder_type::IPV4 => ForwarderFrame::Ipv4(Ipv4::parse(rest)?),
             forwarder_type::PING => ForwarderFrame::Ping(Ping::parse(rest)?),
-            forwarder_type::IPV4_FRAG => ForwarderFrame::Ipv4Frag,
+            forwarder_type::IPV4_FRAG => ForwarderFrame::Ipv4Frag(Ipv4Frag::parse(rest)?),
             forwarder_type::AUTH_ME => ForwarderFrame::AuthMe,
             forwarder_type::INFO => ForwarderFrame::Info,
             _ => return Err(ParseError::NotParseable),
@@ -80,6 +82,7 @@ impl<'a> Parser<'a> for ForwarderFrame<'a> {
 }
 
 
+#[derive(Debug)]
 pub struct Ipv4<'a> {
     payload: &'a [u8]
 }
@@ -94,12 +97,43 @@ impl<'a> Parser<'a> for Ipv4<'a> {
 impl<'a> Ipv4<'a> {
     pub fn src_ip(&self) -> Ipv4Addr {
         let mut octets = [0u8; 4];
-        octets.copy_from_slice(&self.payload[0..4]);
+        octets.copy_from_slice(&self.payload[field::SRC_IP]);
+        octets.into()
+    }
+    pub fn dst_ip(&self) -> Ipv4Addr {
+        let mut octets = [0u8; 4];
+        octets.copy_from_slice(&self.payload[field::DST_IP]);
+        octets.into()
+    }
+}
+
+#[derive(Debug)]
+pub struct Ipv4Frag<'a> {
+    payload: &'a [u8]
+}
+
+impl<'a> Parser<'a> for Ipv4Frag<'a> {
+    const MIN_LENGTH: usize = 20;
+    fn do_parse(bytes: &'a [u8]) -> Result<Ipv4Frag> {
+        Ok(Ipv4Frag { payload: bytes })
+    }
+}
+
+impl<'a> Ipv4Frag<'a> {
+    pub fn src_ip(&self) -> Ipv4Addr {
+        let mut octets = [0u8; 4];
+        octets.copy_from_slice(&self.payload[field::FRAG_SRC_IP]);
+        octets.into()
+    }
+    pub fn dst_ip(&self) -> Ipv4Addr {
+        let mut octets = [0u8; 4];
+        octets.copy_from_slice(&self.payload[field::FRAG_DST_IP]);
         octets.into()
     }
 }
 
 
+#[derive(Debug)]
 pub struct Ping<'a> {
     payload: &'a [u8]
 }
@@ -113,5 +147,13 @@ impl<'a> Parser<'a> for Ping<'a> {
         } else {
             Ok(Ping { payload: bytes })
         }
+    }
+}
+
+impl<'a> Ping<'a> {
+    pub fn build(&self) -> Vec<u8> {
+        let mut out = vec![forwarder_type::PING];
+        out.extend_from_slice(&self.payload[0..4]);
+        out
     }
 }

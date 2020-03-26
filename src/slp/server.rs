@@ -1,13 +1,13 @@
 use tokio::io::Result;
 use tokio::net::{UdpSocket, udp::RecvHalf};
 use tokio::sync::{RwLock, mpsc};
-use std::net::SocketAddr;
+use std::net::{SocketAddr, Ipv4Addr};
 use std::sync::Arc;
 use std::time::Duration;
-use lru::LruCache;
 use tokio::time::{Instant, timeout_at};
-use super::Event;
+use super::{Event, SendLANEvent};
 use super::frame::{ForwarderFrame, Parser};
+use std::collections::HashMap;
 
 struct PeerInner {
     rx: mpsc::Receiver<Vec<u8>>,
@@ -53,8 +53,25 @@ impl Peer {
 
             let frame = ForwarderFrame::parse(&packet)?;
             match frame {
+                ForwarderFrame::Keepalive => {},
                 ForwarderFrame::Ipv4(ipv4) => {
-                    println!("ipv4 {}", ipv4.src_ip());
+                    event_send.send(Event::SendLAN(SendLANEvent{
+                        from: addr,
+                        src_ip: ipv4.src_ip(),
+                        dst_ip: ipv4.dst_ip(),
+                        packet,
+                    })).await?
+                },
+                ForwarderFrame::Ping(ping) => {
+                    event_send.send(Event::SendClient(addr, ping.build())).await?
+                },
+                ForwarderFrame::Ipv4Frag(frag) => {
+                    event_send.send(Event::SendLAN(SendLANEvent{
+                        from: addr,
+                        src_ip: frag.src_ip(),
+                        dst_ip: frag.dst_ip(),
+                        packet,
+                    })).await?
                 },
                 _ => (),
             }
@@ -64,12 +81,14 @@ impl Peer {
 }
 
 struct InnerServer {
-    cache: LruCache<SocketAddr, Peer>,
+    cache: HashMap<SocketAddr, Peer>,
+    map: HashMap<Ipv4Addr, SocketAddr>,
 }
 impl InnerServer {
     fn new() -> Self {
         Self {
-            cache: LruCache::new(100),
+            cache: HashMap::new(),
+            map: HashMap::new(),
         }
     }
 }
@@ -97,21 +116,33 @@ impl UDPServer {
             while let Some(event) = event_recv.recv().await {
                 match event {
                     Event::Close(addr) => {
-                        inner.write().await.cache.pop(&addr);
+                        inner.write().await.cache.remove(&addr);
                     },
-                    Event::Unicast(addr, packet) => {
-                        send_half.send_to(&packet, &addr).await.unwrap();
-                    },
-                    Event::Broadcast(exp_addr, packet) => {
-                        for (addr, _) in inner.write().await.cache.iter() {
-                            if &exp_addr == addr {
-                                continue;
+                    Event::SendLAN(SendLANEvent{
+                        from,
+                        src_ip,
+                        dst_ip,
+                        packet
+                    }) => {
+                        let inner = &mut inner.write().await;
+                        inner.map.insert(src_ip, from);
+                        if let Some(addr) = inner.map.get(&dst_ip) {
+                            send_half.send_to(&packet, addr).await.unwrap();
+                        } else {
+                            for (addr, _) in inner.cache.iter() {
+                                if &from == addr {
+                                    continue;
+                                }
+                                send_half.send_to(&packet, &addr).await.unwrap();
                             }
-                            send_half.send_to(&packet, &addr).await.unwrap();
                         }
+                    },
+                    Event::SendClient(addr, packet) => {
+                        send_half.send_to(&packet, &addr).await.unwrap();
                     }
                 }
             }
+            println!("event down");
         });
 
         Ok(Self {
@@ -126,8 +157,8 @@ impl UDPServer {
 
             let cache = &mut inner.write().await.cache;
             let peer = {
-                if cache.peek(&addr).is_none() {
-                    cache.put(addr, Peer::new(addr, event_send.clone()));
+                if cache.get(&addr).is_none() {
+                    cache.insert(addr, Peer::new(addr, event_send.clone()));
                 }
                 cache.get_mut(&addr).unwrap()
             };
