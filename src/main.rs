@@ -10,6 +10,7 @@ use serde::Serialize;
 use std::convert::Infallible;
 use graphql_ws_filter::make_graphql_ws_filter;
 use warp::filters::BoxedFilter;
+use env_logger::Env;
 
 #[derive(Serialize)]
 struct Info {
@@ -31,7 +32,7 @@ fn make_state(udp_server: &UDPServer) -> BoxedFilter<(Context,)> {
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::init();
+    env_logger::from_env(Env::default().default_filter_or("info")).init();
 
     let port: u16 = 11451;
     let bind_address = format!("{}:{}", "0.0.0.0", port);

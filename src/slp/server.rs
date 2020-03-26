@@ -45,11 +45,11 @@ impl Peer {
             let packet = match timeout_at(deadline, rx.recv()).await {
                 Ok(Some(packet)) => packet,
                 _ => {
-                    log::info!("Timeout");
+                    log::debug!("Timeout {}", addr);
                     break
                 },
             };
-            log::info!("on_packet: {:?} {}", packet, addr);
+            log::debug!("on_packet: {:?} {}", packet, addr);
 
             let frame = ForwarderFrame::parse(&packet)?;
             match frame {
@@ -142,7 +142,7 @@ impl UDPServer {
                     }
                 }
             }
-            println!("event down");
+            log::info!("event down");
         });
 
         Ok(Self {
