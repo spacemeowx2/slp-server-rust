@@ -45,7 +45,6 @@ impl Peer {
                     break
                 },
             };
-            log::debug!("on_packet: {:?} {}", packet, addr);
 
             let frame = ForwarderFrame::parse(&packet)?;
             match frame {
