@@ -1,8 +1,10 @@
 mod server;
 mod frame;
+mod peer;
 
 pub use server::*;
 pub use frame::*;
+pub use peer::*;
 use std::net::{SocketAddr, Ipv4Addr};
 
 #[derive(Debug)]
