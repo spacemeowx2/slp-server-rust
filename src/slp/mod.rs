@@ -21,3 +21,15 @@ pub enum Event {
     SendLAN(SendLANEvent),
     SendClient(SocketAddr, Vec<u8>),
 }
+
+pub fn log_err<T, E>(result: std::result::Result<T, E>, msg: &str) {
+    if result.is_err() {
+        log::error!("{}", msg)
+    }
+}
+
+pub fn log_warn<T, E>(result: std::result::Result<T, E>, msg: &str) {
+    if result.is_err() {
+        log::warn!("{}", msg)
+    }
+}

@@ -2,7 +2,7 @@ use tokio::sync::mpsc;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::{Instant, timeout_at};
-use super::{Event, SendLANEvent};
+use super::{Event, SendLANEvent, log_err, log_warn};
 use super::frame::{ForwarderFrame, Parser};
 
 struct PeerInner {
@@ -18,21 +18,22 @@ impl Peer {
         let (tx, rx) = mpsc::channel::<Vec<u8>>(10);
         tokio::spawn(async move {
             let mut exit_send = event_send.clone();
-            if Self::do_packet(PeerInner {
+            log_warn(Self::do_packet(PeerInner {
                 rx,
                 addr,
                 event_send,
-            }).await.is_err() {
-                log::warn!("peer task down")
-            };
-            exit_send.send(Event::Close(addr)).await.unwrap();
+            }).await, "peer task down");
+            log_err(exit_send.send(Event::Close(addr)).await, "peer task send close failed");
         });
         Self {
             sender: tx,
         }
     }
     pub async fn on_packet(&self, data: Vec<u8>) {
-        self.sender.clone().send(data).await.unwrap()
+        log_warn(
+            self.sender.clone().send(data).await,
+            "failed to send packet"
+        )
     }
     async fn do_packet(inner: PeerInner) -> std::result::Result<(), Box<dyn std::error::Error>> {
         let PeerInner { mut rx, addr, mut event_send } = inner;

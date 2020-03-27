@@ -3,7 +3,7 @@ use tokio::net::{UdpSocket, udp::RecvHalf};
 use tokio::sync::{RwLock, mpsc};
 use std::net::{SocketAddr, Ipv4Addr};
 use std::sync::Arc;
-use super::{Event, SendLANEvent, Peer};
+use super::{Event, SendLANEvent, Peer, log_err};
 use std::collections::HashMap;
 
 struct InnerServer {
@@ -53,22 +53,25 @@ impl UDPServer {
                         let inner = &mut inner.write().await;
                         inner.map.insert(src_ip, from);
                         if let Some(addr) = inner.map.get(&dst_ip) {
-                            send_half.send_to(&packet, addr).await.unwrap();
+                            log_err(send_half.send_to(&packet, addr).await, "failed to send unary packet");
                         } else {
                             for (addr, _) in inner.cache.iter() {
                                 if &from == addr {
                                     continue;
                                 }
-                                send_half.send_to(&packet, &addr).await.unwrap();
+                                log_err(
+                                    send_half.send_to(&packet, &addr).await,
+                                    &format!("failed to send to {} when broadcasting", addr)
+                                );
                             }
                         }
                     },
                     Event::SendClient(addr, packet) => {
-                        send_half.send_to(&packet, &addr).await.unwrap();
+                        log_err(send_half.send_to(&packet, &addr).await, "failed to sendclient");
                     }
                 }
             }
-            log::info!("event down");
+            log::error!("event down");
         });
 
         Ok(Self {
