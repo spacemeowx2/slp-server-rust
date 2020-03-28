@@ -5,6 +5,17 @@ use std::net::{SocketAddr, Ipv4Addr};
 use std::sync::Arc;
 use super::{Event, SendLANEvent, Peer, log_err};
 use std::collections::HashMap;
+use serde::Serialize;
+use juniper::{GraphQLObject, FieldError};
+
+/// Infomation about this server
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
+pub struct ServerInfo {
+    /// The number of online clients
+    online: i32,
+    /// The version of the server
+    version: String,
+}
 
 struct InnerServer {
     cache: HashMap<SocketAddr, Peer>,
@@ -15,6 +26,13 @@ impl InnerServer {
         Self {
             cache: HashMap::new(),
             map: HashMap::new(),
+        }
+    }
+
+    fn server_info(&self) -> ServerInfo {
+        ServerInfo {
+            online: self.cache.len() as i32,
+            version: std::env!("CARGO_PKG_VERSION").to_owned(),
         }
     }
 }
@@ -94,7 +112,9 @@ impl UDPServer {
             peer.on_packet(buffer).await;
         }
     }
-    pub async fn online(&self) -> i32 {
-        self.inner.read().await.cache.len() as i32
+    pub async fn server_info(&self) -> ServerInfo {
+        let inner = self.inner.read().await;
+
+        inner.server_info()
     }
 }

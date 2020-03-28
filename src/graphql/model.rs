@@ -1,5 +1,5 @@
 use juniper::{EmptyMutation, FieldError, RootNode};
-use crate::slp::UDPServer;
+use crate::slp::{UDPServer, ServerInfo};
 use std::time::Duration;
 use futures::stream::BoxStream;
 use super::filter_same::FilterSameExt;
@@ -10,41 +10,13 @@ pub struct Context {
 }
 impl juniper::Context for Context {}
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct ServerInfo {
-    online: i32,
-}
-
-impl ServerInfo {
-    async fn new(context: &Context) -> ServerInfo {
-        ServerInfo {
-            online: context.udp_server.online().await
-        }
-    }
-}
-
-/// Infomation about this server
-#[juniper::graphql_object(
-    Context = Context,
-)]
-impl ServerInfo {
-    /// The number of online clients
-    async fn online(&self) -> i32 {
-        self.online
-    }
-    /// The version of the server
-    fn version() -> &str {
-        std::env!("CARGO_PKG_VERSION")
-    }
-}
-
 pub struct Query;
 
 #[juniper::graphql_object(Context = Context)]
 impl Query {
     /// Infomation about this server
     async fn server_info(context: &Context) -> ServerInfo {
-        ServerInfo::new(context).await
+        context.udp_server.server_info().await
     }
 }
 
@@ -65,7 +37,7 @@ impl Subscription {
         .then(move |_| {
             let context = context.clone();
             async move {
-                ServerInfo::new(&context).await
+                context.udp_server.server_info().await
             }
         })
         .filter_same()

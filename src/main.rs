@@ -19,10 +19,7 @@ struct Info {
 }
 
 async fn server_info(context: Context) -> Result<impl warp::Reply, Infallible> {
-    Ok(warp::reply::json(&Info {
-        online: context.udp_server.online().await,
-        version: std::env!("CARGO_PKG_VERSION").to_owned(),
-    }))
+    Ok(warp::reply::json(&context.udp_server.server_info().await))
 }
 
 fn make_state(udp_server: &UDPServer) -> BoxedFilter<(Context,)> {
