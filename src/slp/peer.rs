@@ -18,20 +18,20 @@ impl Peer {
         let (tx, rx) = mpsc::channel::<Vec<u8>>(10);
         tokio::spawn(async move {
             let mut exit_send = event_send.clone();
-            log_warn(Self::do_packet(PeerInner {
+            let _ = Self::do_packet(PeerInner {
                 rx,
                 addr,
                 event_send,
-            }).await, "peer task down");
+            }).await.map_err(|e| log::error!("peer task down {:?}", e));
             log_err(exit_send.send(Event::Close(addr)).await, "peer task send close failed");
         });
         Self {
             sender: tx,
         }
     }
-    pub async fn on_packet(&self, data: Vec<u8>) {
+    pub fn on_packet(&self, data: Vec<u8>) {
         log_warn(
-            self.sender.clone().send(data).await,
+            self.sender.clone().try_send(data),
             "failed to send packet"
         )
     }
@@ -51,23 +51,23 @@ impl Peer {
             match frame {
                 ForwarderFrame::Keepalive => {},
                 ForwarderFrame::Ipv4(ipv4) => {
-                    event_send.send(Event::SendLAN(SendLANEvent{
+                    event_send.try_send(Event::SendLAN(SendLANEvent{
                         from: addr,
                         src_ip: ipv4.src_ip(),
                         dst_ip: ipv4.dst_ip(),
                         packet,
-                    })).await?
+                    }))?
                 },
                 ForwarderFrame::Ping(ping) => {
-                    event_send.send(Event::SendClient(addr, ping.build())).await?
+                    event_send.try_send(Event::SendClient(addr, ping.build()))?
                 },
                 ForwarderFrame::Ipv4Frag(frag) => {
-                    event_send.send(Event::SendLAN(SendLANEvent{
+                    event_send.try_send(Event::SendLAN(SendLANEvent{
                         from: addr,
                         src_ip: frag.src_ip(),
                         dst_ip: frag.dst_ip(),
                         packet,
-                    })).await?
+                    }))?
                 },
                 _ => (),
             }

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::{Event, SendLANEvent, Peer, log_err};
 use std::collections::HashMap;
 use serde::Serialize;
-use juniper::{GraphQLObject, FieldError};
+use juniper::GraphQLObject;
 
 /// Infomation about this server
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
@@ -47,7 +47,7 @@ impl UDPServer {
         let inner = Arc::new(RwLock::new(InnerServer::new()));
         let inner2 = inner.clone();
         let inner3 = inner.clone();
-        let (event_send, mut event_recv) = mpsc::channel::<Event>(1);
+        let (event_send, mut event_recv) = mpsc::channel::<Event>(10);
         let (recv_half, mut send_half) = UdpSocket::bind(addr).await?.split();
 
         tokio::spawn(async {
@@ -58,9 +58,10 @@ impl UDPServer {
         tokio::spawn(async move {
             let inner = inner3;
             while let Some(event) = event_recv.recv().await {
+                let inner = &mut inner.write().await;
                 match event {
                     Event::Close(addr) => {
-                        inner.write().await.cache.remove(&addr);
+                        inner.cache.remove(&addr);
                     },
                     Event::SendLAN(SendLANEvent{
                         from,
@@ -68,7 +69,6 @@ impl UDPServer {
                         dst_ip,
                         packet
                     }) => {
-                        let inner = &mut inner.write().await;
                         inner.map.insert(src_ip, from);
                         if let Some(addr) = inner.map.get(&dst_ip) {
                             log_err(send_half.send_to(&packet, addr).await, "failed to send unary packet");
@@ -109,7 +109,7 @@ impl UDPServer {
                 }
                 cache.get_mut(&addr).unwrap()
             };
-            peer.on_packet(buffer).await;
+            peer.on_packet(buffer);
         }
     }
     pub async fn server_info(&self) -> ServerInfo {
