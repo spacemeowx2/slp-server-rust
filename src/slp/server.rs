@@ -98,7 +98,7 @@ impl UDPServer {
         let inner = Arc::new(RwLock::new(InnerServer::new()));
         let inner2 = inner.clone();
         let inner3 = inner.clone();
-        let (event_send, mut event_recv) = mpsc::channel::<Event>(10);
+        let (event_send, mut event_recv) = mpsc::channel::<Event>(100);
         let (recv_half, mut send_half) = UdpSocket::bind(addr).await?.split();
 
         tokio::spawn(async {
