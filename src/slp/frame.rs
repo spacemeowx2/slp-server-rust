@@ -46,7 +46,7 @@ pub trait Parser<'a> {
     where
         Self: Sized
     {
-        if bytes.len() < Self::MIN_LENGTH || bytes.len() >= Self::MAX_LENGTH {
+        if bytes.len() < Self::MIN_LENGTH || bytes.len() > Self::MAX_LENGTH {
             Err(ParseError::NotParseable)
         } else {
             Self::do_parse(bytes)
@@ -142,11 +142,7 @@ impl<'a> Parser<'a> for Ping<'a> {
     const MIN_LENGTH: usize = 4;
     const MAX_LENGTH: usize = 4;
     fn do_parse(bytes: &'a [u8]) -> Result<Ping> {
-        if bytes.len() < 4 {
-            Err(ParseError::NotParseable)
-        } else {
-            Ok(Ping { payload: bytes })
-        }
+        Ok(Ping { payload: bytes })
     }
 }
 
