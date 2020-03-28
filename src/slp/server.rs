@@ -9,7 +9,7 @@ use serde::Serialize;
 use juniper::GraphQLObject;
 use std::time::{Instant, Duration};
 
-const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// Infomation about this server
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
@@ -69,11 +69,11 @@ struct InnerServer {
     ignore_idle: bool,
 }
 impl InnerServer {
-    fn new() -> Self {
+    fn new(ignore_idle: bool) -> Self {
         Self {
             cache: HashMap::new(),
             map: HashMap::new(),
-            ignore_idle: true,
+            ignore_idle,
         }
     }
 
@@ -94,8 +94,8 @@ pub struct UDPServer {
 }
 
 impl UDPServer {
-    pub async fn new(addr: &str) -> Result<Self> {
-        let inner = Arc::new(RwLock::new(InnerServer::new()));
+    pub async fn new(addr: &str, ignore_idle: bool) -> Result<Self> {
+        let inner = Arc::new(RwLock::new(InnerServer::new(ignore_idle)));
         let inner2 = inner.clone();
         let inner3 = inner.clone();
         let (event_send, mut event_recv) = mpsc::channel::<Event>(100);
@@ -125,7 +125,8 @@ impl UDPServer {
                             log_err(send_half.send_to(&packet, addr).await, "failed to send unary packet");
                         } else {
                             for (addr, _) in inner.cache.iter()
-                                .filter(|(addr, i)| !inner.ignore_idle || i.state.is_connected() && &&from != addr)
+                                .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
+                                .filter(|(addr, _) | &&from != addr)
                             {
                                 log_err(
                                     send_half.send_to(&packet, &addr).await,

@@ -41,11 +41,16 @@ async fn main() -> std::io::Result<()> {
             .value_name("Port")
             .help("Sets server listening port")
             .takes_value(true))
+        .arg(Arg::with_name("ignore_idle")
+            .short("i")
+            .value_name("Ignore Idle")
+            .help("Don't send broadcast to idle clients"))
         .get_matches();
 
     let port: u16 = matches.value_of("port").unwrap_or("11451").parse().expect("Can't parse port");
+    let ignore_idle: bool = matches.is_present("ignore_idle");
     let bind_address = format!("{}:{}", "0.0.0.0", port);
-    let udp_server = UDPServer::new(&bind_address).await?;
+    let udp_server = UDPServer::new(&bind_address, ignore_idle).await?;
 
     log::info!("Listening on {}", bind_address);
 
