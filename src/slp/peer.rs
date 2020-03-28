@@ -58,9 +58,6 @@ impl Peer {
                         packet,
                     }))?
                 },
-                ForwarderFrame::Ping(ping) => {
-                    event_send.try_send(Event::SendClient(addr, ping.build()))?
-                },
                 ForwarderFrame::Ipv4Frag(frag) => {
                     event_send.try_send(Event::SendLAN(SendLANEvent{
                         from: addr,

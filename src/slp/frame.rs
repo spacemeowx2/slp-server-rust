@@ -54,6 +54,7 @@ pub trait Parser<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum ForwarderFrame<'a> {
     Keepalive,
     Ipv4(Ipv4<'a>),
