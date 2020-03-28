@@ -24,3 +24,4 @@ juniper_codegen = { git = "https://github.com/graphql-rust/juniper", branch = "m
 juniper = { git = "https://github.com/graphql-rust/juniper", branch = "master" }
 juniper_warp = { git = "https://github.com/graphql-rust/juniper", branch = "master", features = ["subscriptions"] }
 juniper_subscriptions = { git = "https://github.com/graphql-rust/juniper", branch = "master" }
+clap = "2.33.0"
