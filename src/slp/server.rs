@@ -66,14 +66,14 @@ impl From<InnerPeer> for Peer {
 struct InnerServer {
     cache: HashMap<SocketAddr, Peer>,
     map: HashMap<Ipv4Addr, SocketAddr>,
-    ignore_idle: bool,
+    config: UDPServerConfig,
 }
 impl InnerServer {
-    fn new(ignore_idle: bool) -> Self {
+    fn new(config: UDPServerConfig) -> Self {
         Self {
             cache: HashMap::new(),
             map: HashMap::new(),
-            ignore_idle,
+            config,
         }
     }
 
@@ -88,14 +88,18 @@ impl InnerServer {
     }
 }
 
+pub struct UDPServerConfig {
+    ignore_idle: bool,
+}
+
 #[derive(Clone)]
 pub struct UDPServer {
     inner: Arc<RwLock<InnerServer>>,
 }
 
 impl UDPServer {
-    pub async fn new(addr: &str, ignore_idle: bool) -> Result<Self> {
-        let inner = Arc::new(RwLock::new(InnerServer::new(ignore_idle)));
+    pub async fn new(addr: &str, config: UDPServerConfig) -> Result<Self> {
+        let inner = Arc::new(RwLock::new(InnerServer::new(config)));
         let inner2 = inner.clone();
         let inner3 = inner.clone();
         let (event_send, mut event_recv) = mpsc::channel::<Event>(100);
@@ -125,7 +129,7 @@ impl UDPServer {
                             log_err(send_half.send_to(&packet, addr).await, "failed to send unary packet");
                         } else {
                             for (addr, _) in inner.cache.iter()
-                                .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
+                                .filter(|(_, i)| !inner.config.ignore_idle || i.state.is_connected())
                                 .filter(|(addr, _) | &&from != addr)
                             {
                                 log_err(
@@ -142,6 +146,15 @@ impl UDPServer {
             }
             log::error!("event down");
         });
+        // tokio::spawn(
+        //     tokio::time::interval(
+        //         Duration::from_secs(15)
+        //     )
+        //     .for_each(|_| async {
+
+        //     })
+        //     .boxed()
+        // );
 
         Ok(Self {
             inner,
@@ -199,5 +212,23 @@ impl UDPServer {
         let inner = self.inner.read().await;
 
         inner.server_info()
+    }
+}
+
+
+pub struct UDPServerBuilder(UDPServerConfig);
+
+impl UDPServerBuilder {
+    pub fn new() -> UDPServerBuilder {
+        UDPServerBuilder(UDPServerConfig {
+            ignore_idle: false,
+        })
+    }
+    pub fn ignore_idle(mut self, v: bool) -> Self {
+        self.0.ignore_idle = v;
+        self
+    }
+    pub async fn build(self, addr: &str) -> Result<UDPServer> {
+        UDPServer::new(addr, self.0).await
     }
 }
