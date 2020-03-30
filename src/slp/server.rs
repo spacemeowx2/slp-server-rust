@@ -1,15 +1,9 @@
 use tokio::io::Result;
 use tokio::net::{UdpSocket, udp::RecvHalf};
-use tokio::sync::{RwLock, mpsc};
-use std::net::{SocketAddr, Ipv4Addr};
-use std::sync::Arc;
-use super::{Event, SendLANEvent, Peer as InnerPeer, log_err, log_warn, ForwarderFrame, Parser};
-use std::collections::HashMap;
+use tokio::sync::mpsc;
+use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo};
 use serde::Serialize;
 use juniper::GraphQLObject;
-use std::time::{Instant, Duration};
-
-const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// Infomation about this server
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
@@ -22,101 +16,33 @@ pub struct ServerInfo {
     version: String,
 }
 
-#[derive(Debug, PartialEq)]
-enum PeerState {
-    Connected(Instant),
-    Idle,
-}
-
-impl PeerState {
-    fn is_connected(&self) -> bool {
-        match self {
-            &PeerState::Connected(_) => true,
-            _ => false,
-        }
-    }
-    fn is_idle(&self) -> bool {
-        match self {
-            &PeerState::Idle => true,
-            _ => false,
-        }
-    }
-}
-
-struct Peer {
-    state: PeerState,
-    peer: InnerPeer,
-}
-
-impl Peer {
-    fn new(inner: InnerPeer) -> Self {
-        Self {
-            state: PeerState::Idle,
-            peer: inner,
-        }
-    }
-}
-
-impl From<InnerPeer> for Peer {
-    fn from(inner: InnerPeer) -> Self {
-        Self::new(inner)
-    }
-}
-
-struct InnerServer {
-    cache: HashMap<SocketAddr, Peer>,
-    map: HashMap<Ipv4Addr, SocketAddr>,
-    config: UDPServerConfig,
-}
-impl InnerServer {
-    fn new(config: UDPServerConfig) -> Self {
-        Self {
-            cache: HashMap::new(),
-            map: HashMap::new(),
-            config,
-        }
-    }
-
-    fn server_info(&self) -> ServerInfo {
-        let online = self.cache.len() as i32;
-        let idle = self.cache.values().filter(|i| i.state.is_idle()).count() as i32;
-        ServerInfo {
-            online,
-            idle,
-            version: std::env!("CARGO_PKG_VERSION").to_owned(),
-        }
-    }
-}
-
 pub struct UDPServerConfig {
     ignore_idle: bool,
 }
 
 #[derive(Clone)]
 pub struct UDPServer {
-    inner: Arc<RwLock<InnerServer>>,
+    peer_manager: PeerManager,
 }
 
 impl UDPServer {
     pub async fn new(addr: &str, config: UDPServerConfig) -> Result<Self> {
-        let inner = Arc::new(RwLock::new(InnerServer::new(config)));
-        let inner2 = inner.clone();
-        let inner3 = inner.clone();
         let (event_send, mut event_recv) = mpsc::channel::<Event>(100);
         let (recv_half, mut send_half) = UdpSocket::bind(addr).await?.split();
+        let peer_manager = PeerManager::new(config.ignore_idle);
+        let pm2 = peer_manager.clone();
+        let pm3 = peer_manager.clone();
 
         tokio::spawn(async {
-            if let Err(err) = Self::recv(recv_half, inner2, event_send).await {
+            if let Err(err) = Self::recv(recv_half, pm3, event_send).await {
                 log::error!("recv thread exited. reason: {:?}", err);
             }
         });
         tokio::spawn(async move {
-            let inner = inner3;
             while let Some(event) = event_recv.recv().await {
-                let inner = &mut inner.write().await;
                 match event {
                     Event::Close(addr) => {
-                        inner.cache.remove(&addr);
+                        pm2.remove(&addr).await;
                     },
                     Event::SendLAN(SendLANEvent{
                         from,
@@ -124,43 +50,33 @@ impl UDPServer {
                         dst_ip,
                         packet
                     }) => {
-                        inner.map.insert(src_ip, from);
-                        if let Some(addr) = inner.map.get(&dst_ip) {
-                            log_err(send_half.send_to(&packet, addr).await, "failed to send unary packet");
-                        } else {
-                            for (addr, _) in inner.cache.iter()
-                                .filter(|(_, i)| !inner.config.ignore_idle || i.state.is_connected())
-                                .filter(|(addr, _) | &&from != addr)
-                            {
-                                log_err(
-                                    send_half.send_to(&packet, &addr).await,
-                                    &format!("failed to send to {} when broadcasting", addr)
-                                );
-                            }
-                        }
+                        log_warn(
+                            pm2.send_lan(
+                                &mut send_half,
+                                packet,
+                                from,
+                                src_ip,
+                                dst_ip,
+                            ).await,
+                            "failed to send lan packet"
+                        );
                     },
                     Event::SendClient(addr, packet) => {
-                        log_err(send_half.send_to(&packet, &addr).await, "failed to sendclient");
+                        log_warn(
+                            send_half.send_to(&packet, &addr).await,
+                            "failed to send client packet",
+                        );
                     }
                 }
             }
             log::error!("event down");
         });
-        // tokio::spawn(
-        //     tokio::time::interval(
-        //         Duration::from_secs(15)
-        //     )
-        //     .for_each(|_| async {
-
-        //     })
-        //     .boxed()
-        // );
 
         Ok(Self {
-            inner,
+            peer_manager,
         })
     }
-    async fn recv(mut recv: RecvHalf, inner: Arc<RwLock<InnerServer>>, mut event_send: mpsc::Sender<Event>) -> Result<()> {
+    async fn recv(mut recv: RecvHalf, peer_manager: PeerManager, mut event_send: mpsc::Sender<Event>) -> Result<()> {
         loop {
             let mut buffer = vec![0u8; 65536];
             let (size, addr) = recv.recv_from(&mut buffer).await?;
@@ -177,41 +93,21 @@ impl UDPServer {
                 );
                 continue
             }
-            let cache = &mut inner.write().await.cache;
-            let peer = {
-                if cache.get(&addr).is_none() {
-                    cache.insert(
-                        addr,
-                        InnerPeer::new(addr, event_send.clone()).into()
-                    );
-                }
-                cache.get_mut(&addr).unwrap()
-            };
-            let now = Instant::now();
-            let state = match (frame, &peer.state) {
-                (ForwarderFrame::Ipv4(..), _) | (ForwarderFrame::Ipv4Frag(..), _) => {
-                    Some(PeerState::Connected(now))
-                },
-                (_, PeerState::Connected(last_time)) if now.duration_since(*last_time) < IDLE_TIMEOUT => {
-                    None
-                },
-                (_, PeerState::Connected(_)) => {
-                    Some(PeerState::Idle)
-                },
-                _ => {
-                    None
-                },
-            };
-            if let Some(state) = state {
-                peer.state = state;
-            }
-            peer.peer.on_packet(buffer);
+            peer_manager.peer_mut(addr, &event_send, |peer| {
+                log_warn(
+                    peer.on_packet(buffer),
+                    "peer failed to process packet"
+                );
+            }).await;
         }
     }
     pub async fn server_info(&self) -> ServerInfo {
-        let inner = self.inner.read().await;
-
-        inner.server_info()
+        let PeerManagerInfo { online, idle } = self.peer_manager.server_info().await;
+        ServerInfo {
+            online,
+            idle,
+            version: std::env!("CARGO_PKG_VERSION").to_owned(),
+        }
     }
 }
 
