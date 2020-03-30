@@ -119,10 +119,8 @@ impl UDPServer {
                 continue
             }
             peer_manager.peer_mut(addr, &event_send, |peer| {
-                log_warn(
-                    peer.on_packet(buffer),
-                    "peer failed to process packet"
-                );
+                // ignore packet when channel is full
+                let _ = peer.on_packet(buffer);
             }).await;
         }
     }
