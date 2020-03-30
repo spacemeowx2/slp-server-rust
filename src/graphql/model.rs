@@ -1,8 +1,6 @@
 use juniper::{EmptyMutation, FieldError, RootNode};
 use crate::slp::{UDPServer, ServerInfo};
-use std::time::Duration;
 use futures::stream::BoxStream;
-use super::filter_same::FilterSameExt;
 
 #[derive(Clone)]
 pub struct Context {
@@ -31,18 +29,25 @@ impl Subscription {
         let context = context.clone();
         let state: Option<ServerInfo> = None;
 
-        tokio::time::interval(
-            Duration::from_secs(1)
-        )
-        .then(move |_| {
-            let context = context.clone();
-            async move {
-                context.udp_server.server_info().await
-            }
-        })
-        .filter_same()
-        .map(|info| Ok(info))
-        .boxed()
+        context.udp_server
+            .server_info_stream()
+            .await
+            .map(|info| Ok(info))
+            .boxed()
+
+
+        // tokio::time::interval(
+        //     Duration::from_secs(1)
+        // )
+        // .then(move |_| {
+        //     let context = context.clone();
+        //     async move {
+        //         context.udp_server.server_info().await
+        //     }
+        // })
+        // .filter_same()
+        // .map(|info| Ok(info))
+        // .boxed()
     }
 }
 

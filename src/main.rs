@@ -1,6 +1,7 @@
 mod graphql;
 mod slp;
 mod graphql_ws_filter;
+mod ext;
 
 use graphql::{schema, Context};
 use slp::{UDPServer, UDPServerBuilder};
