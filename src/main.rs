@@ -4,7 +4,7 @@ mod graphql_ws_filter;
 mod util;
 
 use graphql::{schema, Context};
-use slp::{UDPServer, UDPServerBuilder};
+use slp::UDPServerBuilder;
 use std::net::SocketAddr;
 use warp::Filter;
 use serde::Serialize;
@@ -24,9 +24,9 @@ async fn server_info(context: Context) -> Result<impl warp::Reply, Infallible> {
     Ok(warp::reply::json(&context.udp_server.server_info().await))
 }
 
-fn make_state(udp_server: &UDPServer) -> BoxedFilter<(Context,)> {
-    let udp_server = udp_server.clone();
-    warp::any().map(move || Context { udp_server: udp_server.clone() }).boxed()
+fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
+    let ctx = context.clone();
+    warp::any().map(move || ctx.clone()).boxed()
 }
 
 #[tokio::main]
@@ -39,6 +39,8 @@ async fn main() -> std::io::Result<()> {
     if ignore_idle {
         log::info!("--ignore-idle is not tested, bugs are expected");
     }
+    let admin_token = matches.value_of("admin_token").map(str::to_string);
+
     let bind_address = format!("{}:{}", "0.0.0.0", port);
     let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
 
@@ -46,17 +48,18 @@ async fn main() -> std::io::Result<()> {
         .ignore_idle(ignore_idle)
         .build(socket_addr)
         .await?;
+    let context = Context::new(udp_server, admin_token);
 
     log::info!("Listening on {}", bind_address);
 
-    let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&udp_server));
-    let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&udp_server));
+    let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&context));
+    let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&context));
 
 
     let log = warp::log("warp_server");
     let routes = (
         warp::path("info")
-            .and(make_state(&udp_server))
+            .and(make_state(&context))
             .and_then(server_info)
         .or(warp::post()
             .and(graphql_filter))
@@ -87,6 +90,10 @@ fn get_matches<'a>() -> ArgMatches<'a> {
             .value_name("Port")
             .help("Sets server listening port")
             .takes_value(true))
+        .arg(Arg::with_name("admin_token")
+            .long("admin-token")
+            .value_name("Admin Token")
+            .help("Token for admin query. If not preset, no one can query admin information."))
         .arg(Arg::with_name("ignore_idle")
             .short("i")
             .long("ignore-idle")

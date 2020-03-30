@@ -73,21 +73,22 @@ impl PeerManager {
         from: SocketAddr,
         src_ip: Ipv4Addr,
         dst_ip: Ipv4Addr,
-    ) -> Result<()>
+    ) -> Result<usize>
     {
         let inner = &mut self.inner.write().await;
         inner.map.insert(src_ip, from);
         if let Some(addr) = inner.map.get(&dst_ip) {
-            send_half.send_to(&packet, &addr).await?;
+            Ok(send_half.send_to(&packet, &addr).await?)
         } else {
+            let mut size: usize = 0;
             for (addr, _) in inner.cache.iter()
                 .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
                 .filter(|(addr, _) | &&from != addr)
             {
-                send_half.send_to(&packet, &addr).await?;
+                size += send_half.send_to(&packet, &addr).await?;
             }
+            Ok(size)
         }
-        Ok(())
     }
     pub async fn server_info(&self) -> PeerManagerInfo {
         let inner = &self.inner.read().await;
