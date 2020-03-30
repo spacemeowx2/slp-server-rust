@@ -1,6 +1,6 @@
 [package]
 name = "slp-server-rust"
-version = "2.0.0-rust.alpha.1"
+version = "2.0.0-rust.alpha.2"
 authors = ["spacemeowx2 <spacemeowx2@gmail.com>"]
 edition = "2018"
 
