@@ -82,18 +82,18 @@ impl UDPServer {
             log::error!("event down");
         });
         let info_stream = tokio::time::interval(Duration::from_secs(1))
-                .then(move |_| {
-                    let pm = pm4.clone();
-                    async move {
-                        server_info_from_peer(&pm).await
-                    }
-                })
-                .filter_same()
-                .for_each(move |info| {
-                    // ignore the only error: no active receivers
-                    let _ = info_sender2.send(info);
-                    future::ready(())
-                });
+            .then(move |_| {
+                let pm = pm4.clone();
+                async move {
+                    server_info_from_peer(&pm).await
+                }
+            })
+            .filter_same()
+            .for_each(move |info| {
+                // ignore the only error: no active receivers
+                let _ = info_sender2.send(info);
+                future::ready(())
+            });
         tokio::spawn(info_stream);
 
         Ok(Self {
@@ -113,7 +113,7 @@ impl UDPServer {
             };
             if let ForwarderFrame::Ping(ping) = &frame {
                 log_warn(
-                    event_send.try_send(Event::SendClient(addr, ping.build())),
+                    event_send.send(Event::SendClient(addr, ping.build())).await,
                     "failed to send pong"
                 );
                 continue

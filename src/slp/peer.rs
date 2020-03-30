@@ -94,20 +94,20 @@ impl Peer {
             match frame {
                 ForwarderFrame::Keepalive => {},
                 ForwarderFrame::Ipv4(ipv4) => {
-                    let _ = event_send.try_send(Event::SendLAN(SendLANEvent{
+                    event_send.send(Event::SendLAN(SendLANEvent{
                         from: addr,
                         src_ip: ipv4.src_ip(),
                         dst_ip: ipv4.dst_ip(),
                         packet,
-                    }));
+                    })).await?;
                 },
                 ForwarderFrame::Ipv4Frag(frag) => {
-                    let _ = event_send.try_send(Event::SendLAN(SendLANEvent{
+                    event_send.send(Event::SendLAN(SendLANEvent{
                         from: addr,
                         src_ip: frag.src_ip(),
                         dst_ip: frag.dst_ip(),
                         packet,
-                    }));
+                    })).await?;
                 },
                 _ => (),
             }
