@@ -43,7 +43,7 @@ async fn main() -> std::io::Result<()> {
     log::info!("Listening on {}", bind_address);
 
     let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&udp_server));
-    // let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&udp_server));
+    let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&udp_server));
 
     let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
 
@@ -55,9 +55,9 @@ async fn main() -> std::io::Result<()> {
         .or(warp::post()
             .and(graphql_filter))
         // TODO: enable ws until https://github.com/graphql-rust/juniper/issues/589 is fixed
-        // .or(
-        //     warp::get()
-        //     .and(graphql_ws_filter))
+        .or(
+            warp::get()
+            .and(graphql_ws_filter))
     )
     .or(warp::get()
         .and(juniper_warp::playground_filter("/", Some("/"))))

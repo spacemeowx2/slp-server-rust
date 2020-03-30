@@ -891,7 +891,7 @@ checksum = "b8b7a7c0c47db5545ed3fef7468ee7bb5b74691498139e4b3f6a20685dc6dd8e"
 [[package]]
 name = "juniper"
 version = "0.14.2"
-source = "git+https://github.com/graphql-rust/juniper#cab6decdbc54f55692c205bd34f92a8d493a5fe7"
+source = "git+https://github.com/nWacky/juniper?branch=improve-subscriptions#fea6aeb5af0fa6803f04536b978b6a5e8b76ff9a"
 dependencies = [
  "bson",
  "chrono",
@@ -908,7 +908,7 @@ dependencies = [
 [[package]]
 name = "juniper_codegen"
 version = "0.14.2"
-source = "git+https://github.com/graphql-rust/juniper#cab6decdbc54f55692c205bd34f92a8d493a5fe7"
+source = "git+https://github.com/nWacky/juniper?branch=improve-subscriptions#fea6aeb5af0fa6803f04536b978b6a5e8b76ff9a"
 dependencies = [
  "futures 0.3.1",
  "proc-macro-error",
@@ -920,7 +920,7 @@ dependencies = [
 [[package]]
 name = "juniper_subscriptions"
 version = "0.14.2"
-source = "git+https://github.com/graphql-rust/juniper#cab6decdbc54f55692c205bd34f92a8d493a5fe7"
+source = "git+https://github.com/nWacky/juniper?branch=improve-subscriptions#fea6aeb5af0fa6803f04536b978b6a5e8b76ff9a"
 dependencies = [
  "futures 0.3.1",
  "juniper",
@@ -929,7 +929,7 @@ dependencies = [
 [[package]]
 name = "juniper_warp"
 version = "0.5.2"
-source = "git+https://github.com/graphql-rust/juniper#cab6decdbc54f55692c205bd34f92a8d493a5fe7"
+source = "git+https://github.com/nWacky/juniper?branch=improve-subscriptions#fea6aeb5af0fa6803f04536b978b6a5e8b76ff9a"
 dependencies = [
  "failure",
  "futures 0.3.1",

@@ -22,7 +22,7 @@ where
 {
     let coordinator = Arc::new(juniper_subscriptions::Coordinator::new(schema));
 
-    let filter = (warp::ws()
+    let filter = warp::ws()
         .and(context_extractor)
         .and(warp::any().map(move || Arc::clone(&coordinator)))
         .map(
@@ -30,10 +30,16 @@ where
              ctx: Context,
              coordinator: Arc<Coordinator<'static, _, _, _, _, _>>| {
                 ws.on_upgrade(|websocket| -> Pin<Box<dyn Future<Output = ()> + Send>> {
-                    graphql_subscriptions(websocket, coordinator, ctx).boxed()
+                    graphql_subscriptions(websocket, coordinator, ctx)
+                        .map(|r| {
+                            if let Err(e) = r {
+                                println!("Ws error: {}", e);
+                            }
+                        })
+                        .boxed()
                 })
             },
-        ))
+        )
         .map(|reply| {
             warp::reply::with_header(reply, "Sec-WebSocket-Protocol", "graphql-ws")
         });
