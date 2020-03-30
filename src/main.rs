@@ -36,9 +36,11 @@ async fn main() -> std::io::Result<()> {
 
     let port: u16 = matches.value_of("port").unwrap_or("11451").parse().expect("Can't parse port");
     let bind_address = format!("{}:{}", "0.0.0.0", port);
+    let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
+
     let udp_server = UDPServerBuilder::new()
         .ignore_idle(matches.is_present("ignore_idle"))
-        .build(&bind_address)
+        .build(socket_addr)
         .await?;
 
     log::info!("Listening on {}", bind_address);
@@ -46,7 +48,6 @@ async fn main() -> std::io::Result<()> {
     let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&udp_server));
     let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&udp_server));
 
-    let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
 
     let log = warp::log("warp_server");
     let routes = (

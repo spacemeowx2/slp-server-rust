@@ -1,5 +1,5 @@
 use tokio::io::Result;
-use tokio::net::{UdpSocket, udp::RecvHalf};
+use tokio::net::udp::RecvHalf;
 use tokio::sync::{mpsc, broadcast};
 use tokio::time::Duration;
 use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo};
@@ -7,7 +7,8 @@ use serde::Serialize;
 use juniper::GraphQLObject;
 use futures::{stream::{StreamExt, BoxStream}};
 use futures::prelude::*;
-use crate::util::FilterSameExt;
+use crate::util::{FilterSameExt, create_socket};
+use std::net::SocketAddr;
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
 
@@ -33,9 +34,9 @@ pub struct UDPServer {
 }
 
 impl UDPServer {
-    pub async fn new(addr: &str, config: UDPServerConfig) -> Result<Self> {
+    pub async fn new(addr: &SocketAddr, config: UDPServerConfig) -> Result<Self> {
         let (event_send, mut event_recv) = mpsc::channel::<Event>(100);
-        let (recv_half, mut send_half) = UdpSocket::bind(addr).await?.split();
+        let (recv_half, mut send_half) = create_socket(addr).await?.split();
         let (info_sender, _) = broadcast::channel(1);
         let info_sender2 = info_sender.clone();
         let peer_manager = PeerManager::new(config.ignore_idle);
@@ -161,7 +162,7 @@ impl UDPServerBuilder {
         self.0.ignore_idle = v;
         self
     }
-    pub async fn build(self, addr: &str) -> Result<UDPServer> {
+    pub async fn build(self, addr: &SocketAddr) -> Result<UDPServer> {
         UDPServer::new(addr, self.0).await
     }
 }
