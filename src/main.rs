@@ -85,7 +85,7 @@ fn get_matches<'a>() -> ArgMatches<'a> {
             .takes_value(true))
         .arg(Arg::with_name("ignore_idle")
             .short("i")
-            .value_name("Ignore Idle")
+            .long("ignore-idle")
             .help("Don't send broadcast to idle clients"))
         .get_matches()
 }
