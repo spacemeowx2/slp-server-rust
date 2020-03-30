@@ -7,7 +7,7 @@ use serde::Serialize;
 use juniper::GraphQLObject;
 use futures::{stream::{StreamExt, BoxStream}};
 use futures::prelude::*;
-use crate::ext::FilterSameExt;
+use crate::util::FilterSameExt;
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
 
