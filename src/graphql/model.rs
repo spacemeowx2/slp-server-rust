@@ -34,20 +34,6 @@ impl Subscription {
             .await
             .map(|info| Ok(info))
             .boxed()
-
-
-        // tokio::time::interval(
-        //     Duration::from_secs(1)
-        // )
-        // .then(move |_| {
-        //     let context = context.clone();
-        //     async move {
-        //         context.udp_server.server_info().await
-        //     }
-        // })
-        // .filter_same()
-        // .map(|info| Ok(info))
-        // .boxed()
     }
 }
 
