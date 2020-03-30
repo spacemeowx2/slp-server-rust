@@ -35,11 +35,15 @@ async fn main() -> std::io::Result<()> {
     let matches = get_matches();
 
     let port: u16 = matches.value_of("port").unwrap_or("11451").parse().expect("Can't parse port");
+    let ignore_idle = matches.is_present("ignore_idle");
+    if ignore_idle {
+        log::info!("--ignore-idle is not tested, bugs are expected");
+    }
     let bind_address = format!("{}:{}", "0.0.0.0", port);
     let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
 
     let udp_server = UDPServerBuilder::new()
-        .ignore_idle(matches.is_present("ignore_idle"))
+        .ignore_idle(ignore_idle)
         .build(socket_addr)
         .await?;
 
