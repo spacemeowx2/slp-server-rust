@@ -1,8 +1,8 @@
 use tokio::io::Result;
-use tokio::net::udp::RecvHalf;
+use tokio::net::{UdpSocket};
 use tokio::sync::{Mutex, mpsc, broadcast};
 use tokio::time::Duration;
-use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo};
+use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet};
 use serde::Serialize;
 use juniper::GraphQLObject;
 use futures::{stream::{StreamExt, BoxStream}};
@@ -89,61 +89,21 @@ impl UDPServer {
     pub async fn new(addr: &SocketAddr, config: UDPServerConfig) -> Result<Self> {
         let inner = Inner::new();
         let inner2 = inner.clone();
-        let inner3 = inner.clone();
         let inner5 = inner.clone();
-        let (event_send, mut event_recv) = mpsc::channel::<Event>(100);
-        let (recv_half, mut send_half) = create_socket(addr).await?.split();
+        let (event_send, event_recv) = mpsc::channel::<Event>(100);
+        let socket = create_socket(addr).await?;
         let (info_sender, _) = broadcast::channel(1);
         let (traffic_sender, _) = broadcast::channel(1);
         let info_sender2 = info_sender.clone();
         let traffic_sender2 = traffic_sender.clone();
         let peer_manager = PeerManager::new(config.ignore_idle);
-        let pm2 = peer_manager.clone();
         let pm3 = peer_manager.clone();
         let pm4 = peer_manager.clone();
 
         tokio::spawn(async {
-            if let Err(err) = Self::recv(inner2, recv_half, pm3, event_send).await {
+            if let Err(err) = Self::recv(inner2, socket, pm3, event_send, event_recv).await {
                 log::error!("recv thread exited. reason: {:?}", err);
             }
-        });
-        tokio::spawn(async move {
-            let inner = inner3;
-            while let Some(event) = event_recv.recv().await {
-                match event {
-                    Event::Close(addr) => {
-                        pm2.remove(&addr).await;
-                    },
-                    Event::SendLAN(SendLANEvent{
-                        from,
-                        src_ip,
-                        dst_ip,
-                        packet
-                    }) => {
-                        let traffic_info = &mut inner.lock().await.traffic_info;
-                        log_warn(
-                            traffic_info.upload(
-                                pm2.send_lan(
-                                    &mut send_half,
-                                    packet,
-                                    from,
-                                    src_ip,
-                                    dst_ip,
-                                ).await
-                            ),
-                            "failed to send lan packet"
-                        );
-                    },
-                    Event::SendClient(addr, packet) => {
-                        let traffic_info = &mut inner.lock().await.traffic_info;
-                        log_warn(
-                            traffic_info.upload(send_half.send_to(&packet, &addr).await),
-                            "failed to send client packet",
-                        );
-                    },
-                }
-            }
-            log::error!("event down");
         });
         tokio::spawn(tokio::time::interval(Duration::from_secs(1))
             .then(move |_| {
@@ -183,10 +143,16 @@ impl UDPServer {
             inner,
         })
     }
-    async fn recv(inner: Arc<Mutex<Inner>>, mut recv: RecvHalf, peer_manager: PeerManager, mut event_send: mpsc::Sender<Event>) -> Result<()> {
+    async fn recv(
+        inner: Arc<Mutex<Inner>>,
+        mut socket: UdpSocket,
+        peer_manager: PeerManager,
+        event_send: mpsc::Sender<Event>,
+        mut event_recv: mpsc::Receiver<Event>,
+    ) -> Result<()> {
         loop {
             let mut buffer = vec![0u8; 65536];
-            let (size, addr) = recv.recv_from(&mut buffer).await?;
+            let (size, addr) = socket.recv_from(&mut buffer).await?;
             buffer.truncate(size);
             {
                 let traffic_info = &mut inner.lock().await.traffic_info;
@@ -198,17 +164,50 @@ impl UDPServer {
                 Err(_) => continue,
             };
             if let ForwarderFrame::Ping(ping) = &frame {
-                log_warn(
-                    event_send.send(Event::SendClient(addr, ping.build())).await,
-                    "failed to send pong"
-                );
+                Self::send_client(inner.clone(), &mut socket, &addr, ping.build()).await;
                 continue
             }
             peer_manager.peer_mut(addr, &event_send, |peer| {
                 // ignore packet when channel is full
                 let _ = peer.on_packet(buffer);
             }).await;
+
+
+            while let Ok(event) = event_recv.try_recv() {
+                match event {
+                    Event::Close(addr) => {
+                        peer_manager.remove(&addr).await;
+                    },
+                    Event::SendLAN(SendLANEvent{
+                        from,
+                        src_ip,
+                        dst_ip,
+                        packet
+                    }) => {
+                        let traffic_info = &mut inner.lock().await.traffic_info;
+                        log_warn(
+                            traffic_info.upload(
+                                peer_manager.send_lan(
+                                    &mut socket,
+                                    packet,
+                                    from,
+                                    src_ip,
+                                    dst_ip,
+                                ).await
+                            ),
+                            "failed to send lan packet"
+                        );
+                    },
+                }
+            }
         }
+    }
+    async fn send_client(inner: Arc<Mutex<Inner>>, socket: &mut UdpSocket, addr: &SocketAddr, packet: Packet) {
+        let traffic_info = &mut inner.lock().await.traffic_info;
+        log_warn(
+            traffic_info.upload(socket.send_to(&packet, addr).await),
+            "failed to send client packet",
+        );
     }
     pub async fn server_info(&self) -> ServerInfo {
         server_info_from_peer(&self.peer_manager).await

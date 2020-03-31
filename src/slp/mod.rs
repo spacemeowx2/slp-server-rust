@@ -23,7 +23,6 @@ pub struct SendLANEvent {
 pub enum Event {
     Close(SocketAddr),
     SendLAN(SendLANEvent),
-    SendClient(SocketAddr, Packet),
 }
 
 pub fn log_err<T, E: std::fmt::Debug>(result: std::result::Result<T, E>, msg: &str) {

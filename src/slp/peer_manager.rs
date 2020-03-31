@@ -1,5 +1,5 @@
 use tokio::io::Result;
-use tokio::net::udp::SendHalf;
+use tokio::net::UdpSocket;
 use tokio::sync::{RwLock, mpsc};
 use std::net::{SocketAddr, Ipv4Addr};
 use std::sync::Arc;
@@ -68,7 +68,7 @@ impl PeerManager {
     }
     pub async fn send_lan(
         &self,
-        send_half: &mut SendHalf,
+        socket: &mut UdpSocket,
         packet: Packet,
         from: SocketAddr,
         src_ip: Ipv4Addr,
@@ -78,14 +78,14 @@ impl PeerManager {
         let inner = &mut self.inner.write().await;
         inner.map.insert(src_ip, from);
         if let Some(addr) = inner.map.get(&dst_ip) {
-            Ok(send_half.send_to(&packet, &addr).await?)
+            Ok(socket.send_to(&packet, &addr).await?)
         } else {
             let mut size: usize = 0;
             for (addr, _) in inner.cache.iter()
                 .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
                 .filter(|(addr, _) | &&from != addr)
             {
-                size += send_half.send_to(&packet, &addr).await?;
+                size += socket.send_to(&packet, &addr).await?;
             }
             Ok(size)
         }
