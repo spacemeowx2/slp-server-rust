@@ -80,8 +80,9 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn get_matches<'a>() -> ArgMatches<'a> {
+    let version = format!("{}-{}", std::env!("CARGO_PKG_VERSION"), std::env!("GIT_HASH"));
     App::new("slp-server-rust")
-        .version(std::env!("CARGO_PKG_VERSION"))
+        .version(&*version)
         .author("imspace <spacemeowx2@gmail.com>")
         .about("switch-lan-play Server written in Rust")
         .arg(Arg::with_name("port")
