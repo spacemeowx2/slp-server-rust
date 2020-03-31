@@ -71,6 +71,6 @@ jobs:
         uses: svenstaro/upload-release-action@v1-release
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/release/${{ matrix.target }}/slp-server-rust
+          file: target/${{ matrix.target }}/release/slp-server-rust
           asset_name: slp-server-rust-${{ matrix.target }}
           tag: ${{ github.ref }}
