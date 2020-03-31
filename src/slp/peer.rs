@@ -80,7 +80,7 @@ impl Peer {
     async fn do_packet(inner: PeerInner) -> std::result::Result<(), Box<dyn std::error::Error>> {
         let PeerInner { mut rx, addr, mut event_send } = inner;
         loop {
-            let packet = match timeout_at(Duration::from_secs(30), rx.recv()).await {
+            let packet = match timeout(Duration::from_secs(30), rx.recv()).await {
                 Ok(Some(packet)) => packet,
                 _ => {
                     log::debug!("Timeout {}", addr);
