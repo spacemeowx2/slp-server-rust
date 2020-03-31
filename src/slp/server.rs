@@ -5,7 +5,7 @@ use tokio::time::Duration;
 use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet};
 use serde::Serialize;
 use juniper::GraphQLObject;
-use futures::{stream::{StreamExt, BoxStream}};
+use futures::{stream::{BoxStream}};
 use futures::prelude::*;
 use crate::util::{FilterSameExt, create_socket};
 use std::net::SocketAddr;
