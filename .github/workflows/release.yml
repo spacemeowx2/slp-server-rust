@@ -1,0 +1,76 @@
+# https://github.com/svenstaro/proxyboi/blob/fd1b493d2c2a341205d669cbf6bd549c5731df63/.github/workflows/publish.yml
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+name: Publish
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: slp-server-rust
+            release_name: slp-server-rust-linux-amd64
+          - os: windows-latest
+            artifact_name: slp-server-rust.exe
+            release_name: slp-server-rust-windows-amd64.exe
+          - os: macos-latest
+            artifact_name: slp-server-rust
+            release_name: slp-server-rust-macos-amd64
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          command: build
+          args: --release
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/release/${{ matrix.artifact_name }}
+          asset_name: ${{ matrix.release_name }}
+          tag: ${{ github.ref }}
+
+  cross_compile_publish:
+    name: Cross compile publish
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - armv7-unknown-linux-gnueabihf
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          command: build
+          args: --release --target=${{ matrix.target }}
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/release/${{ matrix.target }}/slp-server-rust
+          asset_name: slp-server-rust-${{ matrix.target }}
+          tag: ${{ github.ref }}
