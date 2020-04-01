@@ -1,8 +1,7 @@
 use tokio::io::Result;
 use tokio::net::{UdpSocket};
 use tokio::sync::{Mutex, mpsc, broadcast};
-use tokio::time::Duration;
-use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet};
+use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream};
 use serde::Serialize;
 use juniper::GraphQLObject;
 use futures::{stream::{StreamExt, BoxStream}};
@@ -89,52 +88,24 @@ impl UDPServer {
     pub async fn new(addr: &SocketAddr, config: UDPServerConfig) -> Result<Self> {
         let inner = Inner::new();
         let inner2 = inner.clone();
-        let inner5 = inner.clone();
         let (event_send, event_recv) = mpsc::channel::<Event>(100);
         let socket = create_socket(addr).await?;
-        let (info_sender, _) = broadcast::channel(1);
-        let (traffic_sender, _) = broadcast::channel(1);
-        let info_sender2 = info_sender.clone();
-        let traffic_sender2 = traffic_sender.clone();
         let peer_manager = PeerManager::new(config.ignore_idle);
         let pm3 = peer_manager.clone();
-        let pm4 = peer_manager.clone();
 
         tokio::spawn(async {
             if let Err(err) = Self::recv(inner2, socket, pm3, event_send, event_recv).await {
                 log::error!("recv thread exited. reason: {:?}", err);
             }
         });
-        tokio::spawn(tokio::time::interval(Duration::from_secs(1))
-            .then(move |_| {
-                let pm = pm4.clone();
-                async move {
-                    server_info_from_peer(&pm).await
-                }
-            })
-            .filter_same()
-            .for_each(move |info| {
-                // ignore the only error: no active receivers
-                let _ = info_sender2.send(info);
-                future::ready(())
-            })
-        );
-        tokio::spawn(tokio::time::interval(Duration::from_secs(1))
-            .then(move |_| {
-                let inner = inner5.clone();
-                async move {
-                    let mut inner = inner.lock().await;
-                    inner.clear_traffic();
-                    inner.last_traffic_info.clone()
-                }
-            })
-            .filter_same()
-            .for_each(move |info| {
-                // ignore the only error: no active receivers
-                let _ = traffic_sender2.send(info);
-                future::ready(())
-            })
-        );
+        let info_sender = spawn_stream(&peer_manager, |pm| async move {
+            server_info_from_peer(&pm).await
+        });
+        let traffic_sender = spawn_stream(&inner, |inner| async move {
+            let mut inner = inner.lock().await;
+            inner.clear_traffic();
+            inner.last_traffic_info.clone()
+        });
 
         Ok(Self {
             peer_manager,
