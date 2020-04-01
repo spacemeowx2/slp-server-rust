@@ -47,8 +47,12 @@ impl Inner {
     async fn out_packet(&mut self, packet: &OutPacket) {
         self.0.lock().await.0.upload(packet.as_ref().len() as i32)
     }
+    async fn traffic_info(&self) -> TrafficInfo {
+        self.0.lock().await.0.clone()
+    }
 }
 
+#[derive(Clone)]
 pub struct Traffic(Inner, broadcast::Sender<TrafficInfo>);
 
 impl Traffic {
@@ -60,6 +64,9 @@ impl Traffic {
         });
 
         Traffic(inner, traffic_sender)
+    }
+    pub async fn traffic_info(&self) -> TrafficInfo {
+        self.0.traffic_info().await
     }
 }
 
@@ -73,11 +80,25 @@ impl Plugin for Traffic {
     }
 }
 
-pub struct Factory;
+pub struct TrafficType;
+pub const TRAFFIC_NAME: &str = "traffic";
 
-impl PluginFactory for Factory {
+lazy_static! {
+    pub static ref TRAFFIC_TYPE: BoxPluginType<Traffic> = Box::new(TrafficType);
+}
+
+impl PluginType<Traffic> for TrafficType {
     fn name(&self) -> String {
-        "traffic".to_string()
+        TRAFFIC_NAME.to_string()
+    }
+    fn new(&self, _: Context) -> Box<dyn Plugin + Send + 'static> {
+        Box::new(Traffic::new())
+    }
+}
+
+impl PluginType for TrafficType {
+    fn name(&self) -> String {
+        TRAFFIC_NAME.to_string()
     }
     fn new(&self, _: Context) -> Box<dyn Plugin + Send + 'static> {
         Box::new(Traffic::new())

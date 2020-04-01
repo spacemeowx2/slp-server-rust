@@ -1,5 +1,6 @@
 use juniper::{EmptyMutation, FieldError, RootNode, Value};
-use crate::slp::{UDPServer, ServerInfo, TrafficInfo};
+use crate::slp::{UDPServer, ServerInfo};
+use crate::plugin::traffic::{TrafficInfo, TRAFFIC_TYPE};
 use futures::stream::BoxStream;
 use std::sync::Arc;
 
@@ -37,7 +38,16 @@ impl Query {
     /// Traffic infomation last second
     async fn traffic_info(context: &Context, token: String) -> Result<TrafficInfo, FieldError> {
         if Some(token) == context.config.admin_token {
-            Ok(context.udp_server.traffic_info().await)
+            let r = context.udp_server
+                .get_plugin(&TRAFFIC_TYPE, |traffic| {
+                    traffic.map(Clone::clone)
+                })
+                .await;
+            let r = match r {
+                Some(r) => r.traffic_info().await,
+                None => return Err(FieldError::new("This plugin is not available", Value::null())),
+            };
+            Ok(r)
         } else {
             Err(FieldError::new("Permission denied", Value::null()))
         }
@@ -60,20 +70,20 @@ impl Subscription {
             .map(|info| Ok(info))
             .boxed()
     }
-    /// Traffic infomation last second
-    async fn traffic_info(context: &Context, token: String) -> Result<TrafficInfoStream, FieldError> {
-        if Some(token) == context.config.admin_token {
-            let context = context.clone();
+    // /// Traffic infomation last second
+    // async fn traffic_info(context: &Context, token: String) -> Result<TrafficInfoStream, FieldError> {
+    //     if Some(token) == context.config.admin_token {
+    //         let context = context.clone();
 
-            Ok(context.udp_server
-                .traffic_info_stream()
-                .await
-                .map(|info| Ok(info))
-                .boxed())
-        } else {
-            Err(FieldError::new("Permission denied", Value::null()))
-        }
-    }
+    //         Ok(context.udp_server
+    //             .traffic_info_stream()
+    //             .await
+    //             .map(|info| Ok(info))
+    //             .boxed())
+    //     } else {
+    //         Err(FieldError::new("Permission denied", Value::null()))
+    //     }
+    // }
 }
 
 type Schema = RootNode<'static, Query, EmptyMutation<Context>, Subscription>;

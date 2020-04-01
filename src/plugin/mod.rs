@@ -1,17 +1,17 @@
 #[cfg(feature = "ldn_mitm")]
-mod ldn_mitm;
-mod traffic;
+pub mod ldn_mitm;
+pub mod traffic;
 
-use crate::slp::{UDPServer, BoxPluginFactory};
+use crate::slp::{UDPServer, BoxPluginType};
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref PLUGINS: Vec<BoxPluginFactory> = {
-        let mut plugins: Vec<BoxPluginFactory> = vec![];
+    static ref PLUGINS: Vec<BoxPluginType> = {
+        let mut plugins: Vec<BoxPluginType> = vec![];
         if cfg!(feature = "ldn_mitm") {
-            plugins.push(Box::new(ldn_mitm::Factory));
+            plugins.push(Box::new(ldn_mitm::LdnMitmType));
         }
-        plugins.push(Box::new(traffic::Factory));
+        plugins.push(Box::new(traffic::TrafficType));
         plugins
     };
 }

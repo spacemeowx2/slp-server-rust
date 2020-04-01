@@ -222,6 +222,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "downcast-rs"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52ba6eb47c2131e784a38b726eb54c1e1484904f013e576a25354d0124161af6"
+
+[[package]]
 name = "dtoa"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1317,6 +1323,7 @@ version = "2.0.0-rust.alpha.4"
 dependencies = [
  "async-trait",
  "clap",
+ "downcast-rs",
  "env_logger",
  "futures 0.3.1",
  "futures-util",

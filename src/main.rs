@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 mod graphql;
 mod slp;
 mod graphql_ws_filter;

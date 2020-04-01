@@ -8,9 +8,12 @@ impl Plugin for LdnMitm {
     async fn out_packet(&mut self, packet: &OutPacket) {}
 }
 
-pub struct Factory;
+pub struct LdnMitmType;
+lazy_static! {
+    pub static ref LDN_MITM_TYPE: BoxPluginType = Box::new(LdnMitmType);
+}
 
-impl PluginFactory for Factory {
+impl PluginType for LdnMitmType {
     fn name(&self) -> String {
         "ldn_mitm".to_string()
     }

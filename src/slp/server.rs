@@ -1,7 +1,7 @@
 use tokio::io::Result;
 use tokio::net::{UdpSocket};
 use tokio::sync::{Mutex, mpsc, broadcast};
-use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginFactory, Context};
+use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
 use super::{InPacket, OutPacket, OutAddr};
 use serde::Serialize;
 use juniper::GraphQLObject;
@@ -10,10 +10,11 @@ use futures::prelude::*;
 use crate::util::{FilterSameExt, create_socket};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::result;
+use std::collections::HashMap;
+use downcast_rs::Downcast;
+use std::any::Any;
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
-type TrafficInfoStream = BoxStream<'static, TrafficInfo>;
 
 /// Infomation about this server
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
@@ -30,52 +31,15 @@ pub struct UDPServerConfig {
     ignore_idle: bool,
 }
 
-/// Traffic infomation
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
-pub struct TrafficInfo {
-    /// upload bytes last second
-    upload: i32,
-    /// download bytes last second
-    download: i32,
-}
-
-impl TrafficInfo {
-    fn new() -> Self {
-        Self {
-            upload: 0,
-            download: 0,
-        }
-    }
-    fn upload<E>(&mut self, result: result::Result<usize, E>) -> result::Result<usize, E> {
-        if let Ok(size) = &result {
-            self.upload += *size as i32
-        }
-        result
-    }
-    fn download<E>(&mut self, result: result::Result<usize, E>) -> result::Result<usize, E> {
-        if let Ok(size) = &result {
-            self.download += *size as i32
-        }
-        result
-    }
-}
-
 pub struct Inner {
-    traffic_info: TrafficInfo,
-    last_traffic_info: TrafficInfo,
-    plugin: Vec<BoxPlugin>,
+    plugin: HashMap<String, BoxPlugin>,
 }
 
 impl Inner {
     fn new() -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
-            traffic_info: TrafficInfo::new(),
-            last_traffic_info: TrafficInfo::new(),
-            plugin: Vec::new(),
+            plugin: HashMap::new(),
         }))
-    }
-    fn clear_traffic(&mut self) {
-        self.last_traffic_info = std::mem::replace(&mut self.traffic_info, TrafficInfo::new());
     }
 }
 
@@ -83,7 +47,6 @@ impl Inner {
 pub struct UDPServer {
     peer_manager: PeerManager,
     info_sender: broadcast::Sender<ServerInfo>,
-    traffic_sender: broadcast::Sender<TrafficInfo>,
     inner: Arc<Mutex<Inner>>,
 }
 
@@ -104,16 +67,10 @@ impl UDPServer {
         let info_sender = spawn_stream(&peer_manager, |pm| async move {
             server_info_from_peer(&pm).await
         });
-        let traffic_sender = spawn_stream(&inner, |inner| async move {
-            let mut inner = inner.lock().await;
-            inner.clear_traffic();
-            inner.last_traffic_info.clone()
-        });
 
         Ok(Self {
             peer_manager,
             info_sender,
-            traffic_sender,
             inner,
         })
     }
@@ -129,10 +86,6 @@ impl UDPServer {
             let (size, addr) = socket.recv_from(&mut buffer).await?;
             buffer.truncate(size);
             let in_packet = InPacket::new(addr, buffer);
-            {
-                let traffic_info = &mut inner.lock().await.traffic_info;
-                let _ = traffic_info.download(result::Result::<_, ()>::Ok(size));
-            }
 
             let frame = match ForwarderFrame::parse(in_packet.as_ref()) {
                 Ok(f) => f,
@@ -154,15 +107,12 @@ impl UDPServer {
                         peer_manager.remove(&addr).await;
                     },
                     Event::SendLAN(from, packet) => {
-                        let traffic_info = &mut inner.lock().await.traffic_info;
                         log_warn(
-                            traffic_info.upload(
-                                peer_manager.send_lan(
-                                    &mut socket,
-                                    from,
-                                    packet,
-                                ).await
-                            ),
+                            peer_manager.send_lan(
+                                &mut socket,
+                                from,
+                                packet,
+                            ).await,
                             "failed to send lan packet"
                         );
                     },
@@ -171,9 +121,8 @@ impl UDPServer {
         }
     }
     async fn send_client(inner: Arc<Mutex<Inner>>, socket: &mut UdpSocket, addr: &SocketAddr, packet: Packet) {
-        let traffic_info = &mut inner.lock().await.traffic_info;
         log_warn(
-            traffic_info.upload(socket.send_to(&packet, addr).await),
+            socket.send_to(&packet, addr).await,
             "failed to send client packet",
         );
     }
@@ -191,23 +140,16 @@ impl UDPServer {
             .filter_same()
             .boxed()
     }
-    pub async fn traffic_info(&self) -> TrafficInfo {
-        self.inner.lock().await.last_traffic_info.clone()
+    pub async fn add_plugin(&self, typ: &BoxPluginType) {
+        let plugin = typ.new(Context::new(&self.peer_manager));
+        self.inner.lock().await.plugin.insert(typ.name(), plugin);
     }
-    pub async fn traffic_info_stream(&self) -> TrafficInfoStream {
-        let stream = self.traffic_sender
-            .subscribe()
-            .take_while(|info| future::ready(info.is_ok()))
-            .map(|info| info.unwrap());
-
-        stream::once(future::ready(self.traffic_info().await))
-            .chain(stream)
-            .filter_same()
-            .boxed()
-    }
-    pub async fn add_plugin(&self, factory: &BoxPluginFactory) {
-        let plugin = factory.new(Context::new(&self.peer_manager));
-        self.inner.lock().await.plugin.push(plugin);
+    pub async fn get_plugin<'a, T, F, R>(&'a self, typ: &BoxPluginType<T>, func: F) -> R
+    where
+        T: 'static,
+        F: Fn(Option<&T>) -> R
+    {
+        func(self.inner.lock().await.plugin.get(&typ.name()).unwrap().as_any().downcast_ref::<T>())
     }
 }
 

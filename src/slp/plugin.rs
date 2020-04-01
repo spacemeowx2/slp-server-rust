@@ -1,6 +1,6 @@
 pub use super::{PeerManager, InPacket, OutPacket};
 pub use async_trait::async_trait;
-
+use downcast_rs::{Downcast, impl_downcast};
 pub struct Context<'a> {
     peer_manager: &'a PeerManager,
 }
@@ -13,16 +13,18 @@ impl<'a> Context<'a> {
     }
 }
 
-pub trait PluginFactory {
+pub trait PluginType<T = BoxPlugin> {
     fn name(&self) -> String;
-    fn new(&self, context: Context) -> Box<dyn Plugin + Send + 'static>;
+    fn new(&self, context: Context) -> BoxPlugin;
 }
-pub type BoxPluginFactory = Box<dyn PluginFactory + Send + Sync + 'static>;
+
+pub type BoxPluginType<T = BoxPlugin> = Box<dyn PluginType<T> + Send + Sync + 'static>;
 
 #[async_trait]
-pub trait Plugin {
+pub trait Plugin: Downcast {
     async fn in_packet(&mut self, packet: &InPacket) {}
     async fn out_packet(&mut self, packet: &OutPacket) {}
 }
+impl_downcast!(Plugin);
 
 pub type BoxPlugin = Box<dyn Plugin + Send + 'static>;
