@@ -3,7 +3,7 @@ use tokio::net::UdpSocket;
 use tokio::sync::{RwLock, mpsc};
 use std::net::{SocketAddr, Ipv4Addr};
 use std::sync::Arc;
-use super::{Event, Peer, Packet};
+use super::{Event, Peer, OutPacket};
 use std::collections::HashMap;
 
 pub struct PeerManagerInfo {
@@ -69,23 +69,22 @@ impl PeerManager {
     pub async fn send_lan(
         &self,
         socket: &mut UdpSocket,
-        packet: Packet,
         from: SocketAddr,
-        src_ip: Ipv4Addr,
-        dst_ip: Ipv4Addr,
+        packet: OutPacket,
     ) -> Result<usize>
     {
+        let out_addr = packet.out_addr();
         let inner = &mut self.inner.write().await;
-        inner.map.insert(src_ip, from);
-        if let Some(addr) = inner.map.get(&dst_ip) {
-            Ok(socket.send_to(&packet, &addr).await?)
+        inner.map.insert(*out_addr.src_ip(), from);
+        if let Some(addr) = inner.map.get(&out_addr.dst_ip()) {
+            Ok(socket.send_to(packet.as_ref(), &addr).await?)
         } else {
             let mut size: usize = 0;
             for (addr, _) in inner.cache.iter()
                 .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
                 .filter(|(addr, _) | &&from != addr)
             {
-                size += socket.send_to(&packet, &addr).await?;
+                size += socket.send_to(packet.as_ref(), &addr).await?;
             }
             Ok(size)
         }

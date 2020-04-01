@@ -1,10 +1,11 @@
 use tokio::io::Result;
 use tokio::net::{UdpSocket};
 use tokio::sync::{Mutex, mpsc, broadcast};
-use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream};
+use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginFactory, Context};
+use super::{InPacket, OutPacket, OutAddr};
 use serde::Serialize;
 use juniper::GraphQLObject;
-use futures::{stream::{StreamExt, BoxStream}};
+use futures::stream::{StreamExt, BoxStream};
 use futures::prelude::*;
 use crate::util::{FilterSameExt, create_socket};
 use std::net::SocketAddr;
@@ -62,6 +63,7 @@ impl TrafficInfo {
 pub struct Inner {
     traffic_info: TrafficInfo,
     last_traffic_info: TrafficInfo,
+    plugin: Vec<BoxPlugin>,
 }
 
 impl Inner {
@@ -69,6 +71,7 @@ impl Inner {
         Arc::new(Mutex::new(Self {
             traffic_info: TrafficInfo::new(),
             last_traffic_info: TrafficInfo::new(),
+            plugin: Vec::new(),
         }))
     }
     fn clear_traffic(&mut self) {
@@ -125,12 +128,13 @@ impl UDPServer {
             let mut buffer = vec![0u8; 65536];
             let (size, addr) = socket.recv_from(&mut buffer).await?;
             buffer.truncate(size);
+            let in_packet = InPacket::new(addr, buffer);
             {
                 let traffic_info = &mut inner.lock().await.traffic_info;
                 let _ = traffic_info.download(result::Result::<_, ()>::Ok(size));
             }
 
-            let frame = match ForwarderFrame::parse(&buffer) {
+            let frame = match ForwarderFrame::parse(in_packet.as_ref()) {
                 Ok(f) => f,
                 Err(_) => continue,
             };
@@ -140,7 +144,7 @@ impl UDPServer {
             }
             peer_manager.peer_mut(addr, &event_send, |peer| {
                 // ignore packet when channel is full
-                let _ = peer.on_packet(buffer);
+                let _ = peer.on_packet(in_packet);
             }).await;
 
 
@@ -149,21 +153,14 @@ impl UDPServer {
                     Event::Close(addr) => {
                         peer_manager.remove(&addr).await;
                     },
-                    Event::SendLAN(SendLANEvent{
-                        from,
-                        src_ip,
-                        dst_ip,
-                        packet
-                    }) => {
+                    Event::SendLAN(from, packet) => {
                         let traffic_info = &mut inner.lock().await.traffic_info;
                         log_warn(
                             traffic_info.upload(
                                 peer_manager.send_lan(
                                     &mut socket,
-                                    packet,
                                     from,
-                                    src_ip,
-                                    dst_ip,
+                                    packet,
                                 ).await
                             ),
                             "failed to send lan packet"
@@ -207,6 +204,10 @@ impl UDPServer {
             .chain(stream)
             .filter_same()
             .boxed()
+    }
+    pub async fn add_plugin(&self, factory: &BoxPluginFactory) {
+        let plugin = factory.new(Context::new(&self.peer_manager));
+        self.inner.lock().await.plugin.push(plugin);
     }
 }
 

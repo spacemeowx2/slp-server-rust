@@ -3,28 +3,22 @@ mod frame;
 mod peer;
 mod peer_manager;
 mod stream;
+pub mod plugin;
+mod packet;
 
 pub use server::*;
 pub use frame::*;
 pub use peer::*;
 pub use peer_manager::*;
 pub(super) use stream::*;
+pub use plugin::*;
+pub use packet::*;
 use std::net::{SocketAddr, Ipv4Addr};
-
-pub type Packet = Vec<u8>;
-
-#[derive(Debug)]
-pub struct SendLANEvent {
-    from: SocketAddr,
-    src_ip: Ipv4Addr,
-    dst_ip: Ipv4Addr,
-    packet: Packet,
-}
 
 #[derive(Debug)]
 pub enum Event {
     Close(SocketAddr),
-    SendLAN(SendLANEvent),
+    SendLAN(SocketAddr, OutPacket),
 }
 
 pub fn log_err<T, E: std::fmt::Debug>(result: std::result::Result<T, E>, msg: &str) {

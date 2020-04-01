@@ -6,9 +6,15 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["ldn_mitm"]
+ldn_mitm = []
+
 [dependencies]
 log = "0.4.8"
 env_logger = "0.6.2"
+lazy_static = "1.4.0"
+async-trait = "0.1.27"
 
 warp = "0.2"
 futures = "0.3.1"
