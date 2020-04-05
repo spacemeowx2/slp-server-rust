@@ -69,7 +69,6 @@ async fn main() -> std::io::Result<()> {
             .and_then(server_info)
         .or(warp::post()
             .and(graphql_filter))
-        // TODO: enable ws until https://github.com/graphql-rust/juniper/issues/589 is fixed
         .or(
             warp::get()
             .and(graphql_ws_filter))
