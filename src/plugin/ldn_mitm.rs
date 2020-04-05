@@ -10,8 +10,8 @@ impl LdnMitm {
 
 #[async_trait]
 impl Plugin for LdnMitm {
-    async fn in_packet(&mut self, packet: &InPacket) {}
-    async fn out_packet(&mut self, packet: &OutPacket) {}
+    async fn in_packet(&mut self, _packet: &InPacket) {}
+    async fn out_packet(&mut self, _packet: &OutPacket) {}
 }
 
 pub struct LdnMitmType;

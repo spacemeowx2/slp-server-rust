@@ -13,7 +13,7 @@ pub use peer_manager::*;
 pub(super) use stream::*;
 pub use plugin::*;
 pub use packet::*;
-use std::net::{SocketAddr, Ipv4Addr};
+use std::net::SocketAddr;
 
 #[derive(Debug)]
 pub enum Event {

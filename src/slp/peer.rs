@@ -2,7 +2,7 @@ use tokio::sync::mpsc;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::{Instant, timeout};
-use super::{Event, log_err, InPacket, OutPacket, OutAddr};
+use super::{Event, log_err, InPacket, OutPacket};
 use super::frame::{ForwarderFrame, Parser};
 
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);

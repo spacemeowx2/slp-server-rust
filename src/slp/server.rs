@@ -1,8 +1,8 @@
 use tokio::io::Result;
-use tokio::net::{UdpSocket};
+use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, mpsc, broadcast};
 use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
-use super::{InPacket, OutPacket, OutAddr};
+use super::InPacket;
 use serde::Serialize;
 use juniper::GraphQLObject;
 use futures::stream::{StreamExt, BoxStream};
@@ -187,9 +187,6 @@ impl UDPServerBuilder {
 
 
 mod test {
-    use crate::plugin::{self, traffic::TRAFFIC_TYPE};
-    use super::UDPServerBuilder;
-
     #[tokio::test]
     async fn test_get_plugin() {
         let udp_server = UDPServerBuilder::new()
