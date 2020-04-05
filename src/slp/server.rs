@@ -186,7 +186,11 @@ impl UDPServerBuilder {
 }
 
 
+#[cfg(test)]
 mod test {
+    use crate::plugin::{self, traffic::TRAFFIC_TYPE};
+    use super::UDPServerBuilder;
+
     #[tokio::test]
     async fn test_get_plugin() {
         let udp_server = UDPServerBuilder::new()
