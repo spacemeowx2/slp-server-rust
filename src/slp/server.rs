@@ -11,8 +11,6 @@ use crate::util::{FilterSameExt, create_socket};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
-use downcast_rs::Downcast;
-use std::any::Any;
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
 
@@ -87,12 +85,15 @@ impl UDPServer {
             buffer.truncate(size);
             let in_packet = InPacket::new(addr, buffer);
 
+            for (_, p) in &mut inner.lock().await.plugin {
+                p.in_packet(&in_packet).await;
+            }
             let frame = match ForwarderFrame::parse(in_packet.as_ref()) {
                 Ok(f) => f,
                 Err(_) => continue,
             };
             if let ForwarderFrame::Ping(ping) = &frame {
-                Self::send_client(inner.clone(), &mut socket, &addr, ping.build()).await;
+                Self::send_client(&mut socket, &addr, ping.build()).await;
                 continue
             }
             peer_manager.peer_mut(addr, &event_send, |peer| {
@@ -106,12 +107,15 @@ impl UDPServer {
                     Event::Close(addr) => {
                         peer_manager.remove(&addr).await;
                     },
-                    Event::SendLAN(from, packet) => {
+                    Event::SendLAN(from, out_packet) => {
+                        for (_, p) in &mut inner.lock().await.plugin {
+                            p.out_packet(&out_packet).await;
+                        }
                         log_warn(
                             peer_manager.send_lan(
                                 &mut socket,
                                 from,
-                                packet,
+                                out_packet,
                             ).await,
                             "failed to send lan packet"
                         );
@@ -120,7 +124,7 @@ impl UDPServer {
             }
         }
     }
-    async fn send_client(inner: Arc<Mutex<Inner>>, socket: &mut UdpSocket, addr: &SocketAddr, packet: Packet) {
+    async fn send_client(socket: &mut UdpSocket, addr: &SocketAddr, packet: Packet) {
         log_warn(
             socket.send_to(&packet, addr).await,
             "failed to send client packet",
@@ -149,7 +153,9 @@ impl UDPServer {
         T: 'static,
         F: Fn(Option<&T>) -> R
     {
-        func(self.inner.lock().await.plugin.get(&typ.name()).unwrap().as_any().downcast_ref::<T>())
+        let inner = self.inner.lock().await;
+        let plugin = inner.plugin.get(&typ.name()).unwrap();
+        func(plugin.as_any().downcast_ref::<T>())
     }
 }
 
@@ -177,4 +183,24 @@ impl UDPServerBuilder {
     pub async fn build(self, addr: &SocketAddr) -> Result<UDPServer> {
         UDPServer::new(addr, self.0).await
     }
+}
+
+
+mod test {
+    use crate::plugin::{self, traffic::TRAFFIC_TYPE};
+    use super::UDPServerBuilder;
+
+    #[tokio::test]
+    async fn test_get_plugin() {
+        let udp_server = UDPServerBuilder::new()
+            .build(&"0.0.0.0:12121".parse().unwrap())
+            .await
+            .unwrap();
+        plugin::register_plugins(&udp_server).await;
+        let traffic = udp_server.get_plugin(&TRAFFIC_TYPE, |traffic| {
+            traffic.map(Clone::clone)
+        }).await;
+        assert!(traffic.is_some(), true);
+    }
+
 }

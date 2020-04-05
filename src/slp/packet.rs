@@ -34,9 +34,6 @@ impl InPacket {
     pub fn new(addr: SocketAddr, data: Packet) -> InPacket {
         InPacket(data, addr)
     }
-    pub fn bytes(&self) -> &Packet {
-        &self.0
-    }
 }
 
 impl Into<Packet> for InPacket {

@@ -1,9 +1,12 @@
 use crate::slp::plugin::*;
 use crate::slp::spawn_stream;
+use crate::util::FilterSameExt;
 use serde::Serialize;
 use juniper::GraphQLObject;
 use std::sync::Arc;
 use tokio::sync::{Mutex, broadcast};
+use futures::{future, stream::BoxStream};
+use futures::prelude::*;
 
 /// Traffic infomation
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
@@ -13,6 +16,7 @@ pub struct TrafficInfo {
     /// download bytes last second
     download: i32,
 }
+type TrafficInfoStream = BoxStream<'static, TrafficInfo>;
 
 impl TrafficInfo {
     fn new() -> Self {
@@ -29,7 +33,7 @@ impl TrafficInfo {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Inner(Arc<Mutex<(TrafficInfo, TrafficInfo)>>);
 
 impl Inner {
@@ -52,21 +56,32 @@ impl Inner {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Traffic(Inner, broadcast::Sender<TrafficInfo>);
 
 impl Traffic {
-    fn new() -> Traffic {
+    fn new() -> Self {
         let inner = Inner::new();
 
         let traffic_sender = spawn_stream(&inner, |mut inner| async move {
             inner.clear_traffic().await
         });
 
-        Traffic(inner, traffic_sender)
+        Self(inner, traffic_sender)
     }
     pub async fn traffic_info(&self) -> TrafficInfo {
         self.0.traffic_info().await
+    }
+    pub async fn traffic_info_stream(&self) -> TrafficInfoStream {
+        let stream = self.1
+            .subscribe()
+            .take_while(|info| future::ready(info.is_ok()))
+            .map(|info| info.unwrap());
+
+        stream::once(future::ready(self.traffic_info().await))
+            .chain(stream)
+            .filter_same()
+            .boxed()
     }
 }
 
@@ -91,7 +106,7 @@ impl PluginType<Traffic> for TrafficType {
     fn name(&self) -> String {
         TRAFFIC_NAME.to_string()
     }
-    fn new(&self, _: Context) -> Box<dyn Plugin + Send + 'static> {
+    fn new(&self, _: Context) -> BoxPlugin {
         Box::new(Traffic::new())
     }
 }
@@ -100,7 +115,14 @@ impl PluginType for TrafficType {
     fn name(&self) -> String {
         TRAFFIC_NAME.to_string()
     }
-    fn new(&self, _: Context) -> Box<dyn Plugin + Send + 'static> {
+    fn new(&self, _: Context) -> BoxPlugin {
         Box::new(Traffic::new())
     }
+}
+
+#[tokio::test]
+async fn get_traffic_from_box() {
+    let p: BoxPlugin = Box::new(Traffic::new());
+    let t = p.as_any().downcast_ref::<Traffic>();
+    assert!(t.is_some(), true);
 }
