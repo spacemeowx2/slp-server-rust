@@ -1,6 +1,6 @@
-use std::net::{SocketAddr, Ipv4Addr};
+pub use std::net::{SocketAddr, Ipv4Addr};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OutAddr {
     src_ip: Ipv4Addr,
     dst_ip: Ipv4Addr,
@@ -34,6 +34,9 @@ impl InPacket {
     pub fn new(addr: SocketAddr, data: Packet) -> InPacket {
         InPacket(data, addr)
     }
+    pub fn addr(&self) -> &SocketAddr {
+        &self.1
+    }
 }
 
 impl Into<Packet> for InPacket {
@@ -57,6 +60,9 @@ impl OutPacket {
     }
     pub fn out_addr(&self) -> &OutAddr {
         &self.1
+    }
+    pub fn split(self) -> (Packet, OutAddr) {
+        (self.0, self.1)
     }
 }
 

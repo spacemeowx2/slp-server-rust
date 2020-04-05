@@ -1,9 +1,7 @@
-use tokio::io::Result;
-use tokio::net::UdpSocket;
 use tokio::sync::{RwLock, mpsc};
 use std::net::{SocketAddr, Ipv4Addr};
 use std::sync::Arc;
-use super::{Event, Peer, OutPacket};
+use super::{Event, Peer, OutPacket, PacketSender, Packet, SendError};
 use std::collections::HashMap;
 
 pub struct PeerManagerInfo {
@@ -21,14 +19,17 @@ struct InnerPeerManager {
     map: HashMap<Ipv4Addr, SocketAddr>,
 
     ignore_idle: bool,
+
+    packet_tx: PacketSender,
 }
 
 impl InnerPeerManager {
-    fn new(ignore_idle: bool,) -> Self {
+    fn new(packet_tx: PacketSender,ignore_idle: bool,) -> Self {
         Self {
             cache: HashMap::new(),
             map: HashMap::new(),
             ignore_idle,
+            packet_tx,
         }
     }
 }
@@ -39,10 +40,10 @@ pub struct PeerManager {
 }
 
 impl PeerManager {
-    pub fn new(ignore_idle: bool) -> Self {
+    pub fn new(packet_tx: PacketSender, ignore_idle: bool) -> Self {
         Self {
             inner: Arc::new(RwLock::new(
-                InnerPeerManager::new(ignore_idle)
+                InnerPeerManager::new(packet_tx, ignore_idle)
             )),
         }
     }
@@ -50,41 +51,46 @@ impl PeerManager {
         let cache = &mut self.inner.write().await.cache;
         cache.remove(&addr);
     }
-    pub async fn peer_mut<F>(&self, addr: SocketAddr, event_send: &mpsc::Sender<Event>, func: F)
+    pub async fn peer_mut<F>(&self, addr: &SocketAddr, event_send: &mpsc::Sender<Event>, func: F)
     where
         F: FnOnce(&mut Peer) -> ()
     {
         let cache = &mut self.inner.write().await.cache;
         let peer = {
-            if cache.get(&addr).is_none() {
+            if cache.get(addr).is_none() {
                 cache.insert(
-                    addr,
-                    Peer::new(addr, event_send.clone())
+                    *addr,
+                    Peer::new(*addr, event_send.clone())
                 );
             }
-            cache.get_mut(&addr).unwrap()
+            cache.get_mut(addr).unwrap()
         };
         func(peer)
     }
     pub async fn send_lan(
         &self,
-        socket: &mut UdpSocket,
         from: SocketAddr,
         packet: OutPacket,
-    ) -> Result<usize>
+    ) -> std::result::Result<usize, SendError>
     {
-        let out_addr = packet.out_addr();
+        let (packet, out_addr) = packet.split();
+        let len = packet.len();
         let inner = &mut self.inner.write().await;
+        let mut packet_tx = inner.packet_tx.clone();
         inner.map.insert(*out_addr.src_ip(), from);
         if let Some(addr) = inner.map.get(&out_addr.dst_ip()) {
-            Ok(socket.send_to(packet.as_ref(), &addr).await?)
+            let packet: Packet = packet.into();
+            packet_tx.send((packet, *addr)).await?;
+            Ok(len)
         } else {
             let mut size: usize = 0;
             for (addr, _) in inner.cache.iter()
                 .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
                 .filter(|(addr, _) | &&from != addr)
             {
-                size += socket.send_to(packet.as_ref(), &addr).await?;
+                size += len;
+                // TODO: clone packet costs a lot
+                packet_tx.send((packet.clone(), *addr)).await?;
             }
             Ok(size)
         }
