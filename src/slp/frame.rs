@@ -1,5 +1,7 @@
 use std::net::Ipv4Addr;
-use super::packet::OutAddr;
+use lru::LruCache;
+use bytes::Buf;
+use super::packet::{Packet, OutAddr};
 
 mod forwarder_type {
     pub const KEEPALIVE: u8   = 0;
@@ -15,6 +17,11 @@ mod field {
     pub const DST_IP: Field = 16..20;
     pub const FRAG_SRC_IP: Field = 0..4;
     pub const FRAG_DST_IP: Field = 4..8;
+    pub const FRAG_ID: Field = 8..10;
+    pub const FRAG_PART: usize = 10;
+    pub const FRAG_TOTAL_PART: usize = 11;
+    pub const FRAG_LEN: Field = 12..14;
+    pub const FRAG_PMTU: Field = 14..16;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -144,6 +151,24 @@ impl<'a> Ipv4Frag<'a> {
         octets.copy_from_slice(&self.payload[field::FRAG_DST_IP]);
         octets.into()
     }
+    pub fn id(&self) -> u16 {
+        let mut buf = &self.payload[field::FRAG_ID];
+        buf.get_u16()
+    }
+    pub fn part(&self) -> u8 {
+        self.payload[field::FRAG_PART]
+    }
+    pub fn total_part(&self) -> u8 {
+        self.payload[field::FRAG_TOTAL_PART]
+    }
+    pub fn len(&self) -> u16 {
+        let mut buf = &self.payload[field::FRAG_LEN];
+        buf.get_u16()
+    }
+    pub fn pmtu(&self) -> u16 {
+        let mut buf = &self.payload[field::FRAG_PMTU];
+        buf.get_u16()
+    }
 }
 
 
@@ -165,5 +190,58 @@ impl<'a> Ping<'a> {
         let mut out = vec![forwarder_type::PING];
         out.extend_from_slice(&self.payload[0..4]);
         out
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FragItem {
+    src_ip: Ipv4Addr,
+    dst_ip: Ipv4Addr,
+    id: u16,
+    part: u8,
+    total_part: u8,
+    len: u16,
+    pmtu: u16,
+    packet: Packet,
+}
+
+impl FragItem {
+    fn from_frame<'a>(frag: Ipv4Frag<'a>) -> Self {
+        FragItem {
+            src_ip: frag.src_ip(),
+            dst_ip: frag.dst_ip(),
+            id: frag.id(),
+            part: frag.part(),
+            total_part: frag.total_part(),
+            len: frag.len(),
+            pmtu: frag.pmtu(),
+            packet: vec![],
+        }
+    }
+}
+
+pub struct FragParser {
+    cache: LruCache<u16, Vec<Option<FragItem>>>,
+}
+
+impl FragParser {
+    fn process<'a>(&mut self, frame: Ipv4Frag<'a>) -> Option<Packet> {
+        let item = FragItem::from_frame(frame);
+        let id = item.id;
+        let list = if let Some(list) = self.cache.get_mut(&id) {
+            list
+        } else {
+            let mut vec = Vec::new();
+            vec.resize(item.total_part as usize, None);
+            self.cache.put(id, vec);
+            self.cache.get_mut(&id).unwrap()
+        };
+        let part = item.part as usize;
+        list[part] = Some(item);
+        if list.iter().all(|i| i.is_some()) {
+            None
+        } else {
+            None
+        }
     }
 }

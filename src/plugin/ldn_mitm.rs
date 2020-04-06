@@ -1,4 +1,5 @@
 use crate::slp::plugin::*;
+use smoltcp::wire::{UdpPacket, UdpRepr};
 
 pub struct LdnMitm;
 
@@ -10,7 +11,9 @@ impl LdnMitm {
 
 #[async_trait]
 impl Plugin for LdnMitm {
-    async fn in_packet(&mut self, _packet: &InPacket) {}
+    async fn in_packet(&mut self, _packet: &InPacket) {
+
+    }
     async fn out_packet(&mut self, _packet: &OutPacket) {}
 }
 

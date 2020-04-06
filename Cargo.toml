@@ -17,6 +17,8 @@ lazy_static = "1.4.0"
 async-trait = "0.1.27"
 downcast-rs = "1.1.1"
 smoltcp = "0.6.0"
+lru = "0.4.3"
+bytes = "0.5"
 
 warp = "0.2"
 futures = "0.3.1"
