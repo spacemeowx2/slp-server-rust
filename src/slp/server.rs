@@ -151,7 +151,7 @@ impl UDPServer {
                         Err(_) => return,
                     };
                     if let ForwarderFrame::Ping(ping) = &frame {
-                        Self::send_client(&mut tx, addr, ping.build()).await;
+                        Self::send_client(&mut tx, vec![addr], ping.build()).await;
                         return
                     }
                     peer_manager.peer_mut(&addr, &event_send, move |peer| {
@@ -162,7 +162,7 @@ impl UDPServer {
             }
         ).await
     }
-    async fn send_client(socket: &mut PacketSender, addr: SocketAddr, packet: Packet) {
+    async fn send_client(socket: &mut PacketSender, addr: Vec<SocketAddr>, packet: Packet) {
         log_warn(
             socket.send((packet, addr)).await,
             "failed to send client packet",

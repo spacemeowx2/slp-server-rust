@@ -80,18 +80,16 @@ impl PeerManager {
         inner.map.insert(*out_addr.src_ip(), from);
         if let Some(addr) = inner.map.get(&out_addr.dst_ip()) {
             let packet: Packet = packet.into();
-            packet_tx.send((packet, *addr)).await?;
+            packet_tx.send((packet, vec![*addr])).await?;
             Ok(len)
         } else {
-            let mut size: usize = 0;
-            for (addr, _) in inner.cache.iter()
+            let addrs = inner.cache.iter()
                 .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
                 .filter(|(addr, _) | &&from != addr)
-            {
-                size += len;
-                // TODO: clone packet costs a lot
-                packet_tx.send((packet.clone(), *addr)).await?;
-            }
+                .map(|(addr, _)| *addr)
+                .collect::<Vec<_>>();
+            let size: usize = addrs.len() * len;
+            packet_tx.send((packet, addrs)).await?;
             Ok(size)
         }
     }
