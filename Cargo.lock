@@ -685,6 +685,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "managed"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdcec5e97041c7f0f1c5b7d93f12e57293c831c646f4cc7a5db59460c7ea8de6"
+
+[[package]]
 name = "matches"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1335,6 +1341,7 @@ dependencies = [
  "log 0.4.8",
  "serde",
  "serde_json",
+ "smoltcp",
  "tokio",
  "warp",
  "winapi 0.3.8",
@@ -1345,6 +1352,19 @@ name = "smallvec"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c2fb2ec9bcd216a5b0d0ccf31ab17b5ed1d627960edff65bbe95d3ce221cefc"
+
+[[package]]
+name = "smoltcp"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fe46639fd2ec79eadf8fe719f237a7a0bd4dac5d957f1ca5bbdbc1c3c39e53a"
+dependencies = [
+ "bitflags",
+ "byteorder",
+ "libc",
+ "log 0.4.8",
+ "managed",
+]
 
 [[package]]
 name = "socket2"

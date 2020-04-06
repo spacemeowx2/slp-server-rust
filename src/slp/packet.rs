@@ -20,7 +20,7 @@ impl OutAddr {
         &self.src_ip
     }
     pub fn dst_ip(&self) -> &Ipv4Addr {
-        &self.src_ip
+        &self.dst_ip
     }
 }
 

@@ -52,7 +52,6 @@ async fn main() -> std::io::Result<()> {
         .ignore_idle(ignore_idle)
         .build(socket_addr)
         .await?;
-    plugin::register_plugins(&udp_server).await;
 
     let context = Context::new(udp_server, admin_token);
 
