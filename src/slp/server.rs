@@ -1,8 +1,7 @@
 use tokio::io::Result;
 use tokio::sync::{Mutex, mpsc, broadcast};
-use tokio::time::{Duration};
-use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context, ACTION_TIMEOUT};
-use super::{InPacket, packet_stream, PacketSender, PacketReceiver};
+use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
+use super::{packet_stream, PacketSender, PacketReceiver};
 use serde::Serialize;
 use juniper::GraphQLObject;
 use futures::stream::{StreamExt, BoxStream};
@@ -279,7 +278,7 @@ mod test {
 
     #[tokio::test]
     async fn test_server() {
-        let udp_server = UDPServerBuilder::new()
+        let _udp_server = UDPServerBuilder::new()
             .build(&ADDR.parse().unwrap())
             .await
             .unwrap();
