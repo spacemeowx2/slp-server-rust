@@ -58,9 +58,6 @@ impl OutPacket {
     pub fn new(addr: OutAddr, data: Packet) -> OutPacket {
         OutPacket(data, addr)
     }
-    pub fn out_addr(&self) -> &OutAddr {
-        &self.1
-    }
     pub fn split(self) -> (Packet, OutAddr) {
         (self.0, self.1)
     }

@@ -8,7 +8,6 @@ use juniper::GraphQLObject;
 use futures::stream::{StreamExt, BoxStream};
 use futures::prelude::*;
 use crate::util::{FilterSameExt, create_socket};
-use crate::plugin;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -247,7 +246,6 @@ impl UDPServerBuilder {
     }
     pub async fn build(self, addr: &SocketAddr) -> Result<UDPServer> {
         let udp_server = UDPServer::new(addr, self.0).await?;
-        plugin::register_plugins(&udp_server).await;
         Ok(udp_server)
     }
 }
@@ -255,10 +253,9 @@ impl UDPServerBuilder {
 
 #[cfg(test)]
 mod test {
-    use crate::plugin::traffic::TRAFFIC_TYPE;
+    use crate::plugin::{self, traffic::TRAFFIC_TYPE};
     use super::UDPServerBuilder;
     use crate::test::{make_server, make_packet, recv_packet, client_connect};
-    use tokio::net::UdpSocket;
     use smoltcp::wire::*;
 
     const ADDR: &'static str = "127.0.0.1:12121";
@@ -270,6 +267,7 @@ mod test {
             .build(&ADDR.parse().unwrap())
             .await
             .unwrap();
+        plugin::register_plugins(&udp_server).await;
         let traffic = udp_server.get_plugin(&TRAFFIC_TYPE, |traffic| {
             traffic.map(Clone::clone)
         }).await;

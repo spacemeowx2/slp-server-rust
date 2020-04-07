@@ -122,6 +122,9 @@ impl<'a> Ipv4<'a> {
         octets.copy_from_slice(&self.payload[field::DST_IP]);
         octets.into()
     }
+    pub fn data(&self) -> &[u8] {
+        &self.payload
+    }
 }
 
 #[derive(Debug)]
