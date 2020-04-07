@@ -257,10 +257,9 @@ impl UDPServerBuilder {
 mod test {
     use crate::plugin::traffic::TRAFFIC_TYPE;
     use super::UDPServerBuilder;
+    use crate::test::{make_server, make_packet, recv_packet, client_connect};
     use tokio::net::UdpSocket;
-    use tokio::time::{Duration, timeout};
     use smoltcp::wire::*;
-    use smoltcp::phy::ChecksumCapabilities;
 
     const ADDR: &'static str = "127.0.0.1:12121";
 
@@ -277,46 +276,12 @@ mod test {
         assert!(traffic.is_some(), true);
     }
 
-    fn make_packet(src_addr: Ipv4Address, dst_addr: Ipv4Address) -> Vec<u8> {
-        let repr = Ipv4Repr {
-            src_addr,
-            dst_addr,
-            protocol:    IpProtocol::Udp,
-            payload_len: 0,
-            hop_limit:   64
-        };
-        let mut bytes = vec![0xa5; 1 + repr.buffer_len()];
-        let mut packet = Ipv4Packet::new_unchecked(&mut bytes[1..]);
-        repr.emit(&mut packet, &ChecksumCapabilities::default());
-        bytes[0] = 1;
-
-        bytes
-    }
-
-    async fn recv_packet(socket: &mut UdpSocket) -> Vec<u8> {
-        let mut buf = vec![0u8; 65536];
-        let size = timeout(
-            Duration::from_millis(100),
-            socket.recv(&mut buf)
-        ).await.unwrap().unwrap();
-        buf.truncate(size);
-
-        buf
-    }
-
     #[tokio::test]
     async fn test_server() {
-        let udp_server = UDPServerBuilder::new()
-            .find_free_port(true)
-            .build(&ADDR.parse().unwrap())
-            .await
-            .unwrap();
-        let addr = udp_server.local_addr();
+        let (_udp_server, addr) = make_server().await;
 
-        let mut socket1 = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-        let mut socket2 = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-        let _ = socket1.connect(addr).await.unwrap();
-        let _ = socket2.connect(addr).await.unwrap();
+        let mut socket1 = client_connect(addr).await;
+        let mut socket2 = client_connect(addr).await;
 
         let packet1 = make_packet(
             Ipv4Address::new(10, 13, 37, 100),

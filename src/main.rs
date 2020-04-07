@@ -6,6 +6,8 @@ mod slp;
 mod graphql_ws_filter;
 mod util;
 mod plugin;
+#[cfg(test)]
+mod test;
 
 use graphql::{schema, Context};
 use slp::UDPServerBuilder;
