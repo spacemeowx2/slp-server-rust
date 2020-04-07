@@ -15,6 +15,10 @@ pub struct TrafficInfo {
     upload: i32,
     /// download bytes last second
     download: i32,
+    /// upload packets last second
+    upload_packet: i32,
+    /// download packets last second
+    download_packet: i32,
 }
 type TrafficInfoStream = BoxStream<'static, TrafficInfo>;
 
@@ -23,13 +27,17 @@ impl TrafficInfo {
         Self {
             upload: 0,
             download: 0,
+            upload_packet: 0,
+            download_packet: 0,
         }
     }
     fn upload(&mut self, size: i32) {
-        self.upload += size
+        self.upload += size;
+        self.upload_packet += 1;
     }
     fn download(&mut self, size: i32) {
-        self.download += size
+        self.download += size;
+        self.download_packet += 1;
     }
 }
 
