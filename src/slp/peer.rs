@@ -2,7 +2,7 @@ use tokio::sync::mpsc;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::time::{Instant, timeout};
-use super::{Event, SendLANEvent, log_err, Packet};
+use super::{Event, log_err, InPacket, OutPacket};
 use super::frame::{ForwarderFrame, Parser};
 
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
@@ -29,17 +29,17 @@ impl PeerState {
 }
 
 struct PeerInner {
-    rx: mpsc::Receiver<Packet>,
+    rx: mpsc::Receiver<InPacket>,
     addr: SocketAddr,
     event_send: mpsc::Sender<Event>,
 }
 pub struct Peer {
-    sender: mpsc::Sender<Packet>,
+    sender: mpsc::Sender<InPacket>,
     pub(super) state: PeerState,
 }
 impl Peer {
     pub fn new(addr: SocketAddr, event_send: mpsc::Sender<Event>) -> Self {
-        let (tx, rx) = mpsc::channel::<Packet>(10);
+        let (tx, rx) = mpsc::channel::<InPacket>(10);
         tokio::spawn(async move {
             let mut exit_send = event_send.clone();
             let _ = Self::do_packet(PeerInner {
@@ -54,8 +54,8 @@ impl Peer {
             state: PeerState::Idle,
         }
     }
-    pub fn on_packet(&mut self, data: Packet) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let frame = ForwarderFrame::parse(&data)?;
+    pub fn on_packet(&mut self, data: InPacket) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let frame = ForwarderFrame::parse(data.as_ref())?;
         let now = Instant::now();
         let state = match (frame, &self.state) {
             (ForwarderFrame::Ipv4(..), _) | (ForwarderFrame::Ipv4Frag(..), _) => {
@@ -88,25 +88,21 @@ impl Peer {
                 },
             };
 
-            let frame = ForwarderFrame::parse(&packet)?;
+            let frame = ForwarderFrame::parse(packet.as_ref())?;
 
             match frame {
                 ForwarderFrame::Keepalive => {},
                 ForwarderFrame::Ipv4(ipv4) => {
-                    event_send.send(Event::SendLAN(SendLANEvent{
-                        from: addr,
-                        src_ip: ipv4.src_ip(),
-                        dst_ip: ipv4.dst_ip(),
-                        packet,
-                    })).await?;
+                    event_send.send(Event::SendLAN(
+                        addr,
+                        OutPacket::new(ipv4.into(), packet.into())
+                    )).await?;
                 },
                 ForwarderFrame::Ipv4Frag(frag) => {
-                    event_send.send(Event::SendLAN(SendLANEvent{
-                        from: addr,
-                        src_ip: frag.src_ip(),
-                        dst_ip: frag.dst_ip(),
-                        packet,
-                    })).await?;
+                    event_send.send(Event::SendLAN(
+                        addr,
+                        OutPacket::new(frag.into(), packet.into())
+                    )).await?;
                 },
                 _ => (),
             }

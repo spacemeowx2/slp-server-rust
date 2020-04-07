@@ -1,4 +1,5 @@
 use std::net::Ipv4Addr;
+use super::packet::OutAddr;
 
 mod forwarder_type {
     pub const KEEPALIVE: u8   = 0;
@@ -44,7 +45,7 @@ pub trait Parser<'a> {
 
     fn parse(bytes: &'a [u8]) -> Result<Self>
     where
-        Self: Sized
+        Self: Sized,
     {
         if bytes.len() < Self::MIN_LENGTH || bytes.len() > Self::MAX_LENGTH {
             Err(ParseError::NotParseable)
@@ -71,9 +72,9 @@ impl<'a> Parser<'a> for ForwarderFrame<'a> {
         let rest = &bytes[1..];
         let frame = match typ {
             forwarder_type::KEEPALIVE => ForwarderFrame::Keepalive,
-            forwarder_type::IPV4 => ForwarderFrame::Ipv4(Ipv4::parse(rest)?),
-            forwarder_type::PING => ForwarderFrame::Ping(Ping::parse(rest)?),
-            forwarder_type::IPV4_FRAG => ForwarderFrame::Ipv4Frag(Ipv4Frag::parse(rest)?),
+            forwarder_type::IPV4 => ForwarderFrame::Ipv4(Ipv4::parse(&rest)?),
+            forwarder_type::PING => ForwarderFrame::Ping(Ping::parse(&rest)?),
+            forwarder_type::IPV4_FRAG => ForwarderFrame::Ipv4Frag(Ipv4Frag::parse(&rest)?),
             forwarder_type::AUTH_ME => ForwarderFrame::AuthMe,
             forwarder_type::INFO => ForwarderFrame::Info,
             _ => return Err(ParseError::NotParseable),
@@ -86,6 +87,12 @@ impl<'a> Parser<'a> for ForwarderFrame<'a> {
 #[derive(Debug)]
 pub struct Ipv4<'a> {
     payload: &'a [u8]
+}
+
+impl<'a> Into<OutAddr> for Ipv4<'a> {
+    fn into(self) -> OutAddr {
+        OutAddr::new(self.src_ip(), self.dst_ip())
+    }
 }
 
 impl<'a> Parser<'a> for Ipv4<'a> {
@@ -111,6 +118,12 @@ impl<'a> Ipv4<'a> {
 #[derive(Debug)]
 pub struct Ipv4Frag<'a> {
     payload: &'a [u8]
+}
+
+impl<'a> Into<OutAddr> for Ipv4Frag<'a> {
+    fn into(self) -> OutAddr {
+        OutAddr::new(self.src_ip(), self.dst_ip())
+    }
 }
 
 impl<'a> Parser<'a> for Ipv4Frag<'a> {

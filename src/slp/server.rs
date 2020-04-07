@@ -1,18 +1,19 @@
 use tokio::io::Result;
-use tokio::net::{UdpSocket};
+use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, mpsc, broadcast};
-use super::{Event, SendLANEvent, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream};
+use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
+use super::{packet_stream, PacketSender, PacketReceiver};
 use serde::Serialize;
 use juniper::GraphQLObject;
-use futures::{stream::{StreamExt, BoxStream}};
+use futures::stream::{StreamExt, BoxStream};
 use futures::prelude::*;
 use crate::util::{FilterSameExt, create_socket};
+use crate::plugin;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::result;
+use std::collections::HashMap;
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
-type TrafficInfoStream = BoxStream<'static, TrafficInfo>;
 
 /// Infomation about this server
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
@@ -27,52 +28,18 @@ pub struct ServerInfo {
 
 pub struct UDPServerConfig {
     ignore_idle: bool,
-}
-
-/// Traffic infomation
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
-pub struct TrafficInfo {
-    /// upload bytes last second
-    upload: i32,
-    /// download bytes last second
-    download: i32,
-}
-
-impl TrafficInfo {
-    fn new() -> Self {
-        Self {
-            upload: 0,
-            download: 0,
-        }
-    }
-    fn upload<E>(&mut self, result: result::Result<usize, E>) -> result::Result<usize, E> {
-        if let Ok(size) = &result {
-            self.upload += *size as i32
-        }
-        result
-    }
-    fn download<E>(&mut self, result: result::Result<usize, E>) -> result::Result<usize, E> {
-        if let Ok(size) = &result {
-            self.download += *size as i32
-        }
-        result
-    }
+    find_free_port: bool,
 }
 
 pub struct Inner {
-    traffic_info: TrafficInfo,
-    last_traffic_info: TrafficInfo,
+    plugin: HashMap<String, BoxPlugin>,
 }
 
 impl Inner {
     fn new() -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
-            traffic_info: TrafficInfo::new(),
-            last_traffic_info: TrafficInfo::new(),
+            plugin: HashMap::new(),
         }))
-    }
-    fn clear_traffic(&mut self) {
-        self.last_traffic_info = std::mem::replace(&mut self.traffic_info, TrafficInfo::new());
     }
 }
 
@@ -80,103 +47,143 @@ impl Inner {
 pub struct UDPServer {
     peer_manager: PeerManager,
     info_sender: broadcast::Sender<ServerInfo>,
-    traffic_sender: broadcast::Sender<TrafficInfo>,
     inner: Arc<Mutex<Inner>>,
+    local_addr: SocketAddr,
+}
+
+async fn find_port(mut addr: SocketAddr) -> Result<(SocketAddr, UdpSocket)> {
+    for port in addr.port()..65535 {
+        addr.set_port(port);
+        match create_socket(&addr).await {
+            Ok(l) => return Ok((addr, l)),
+            _ => continue
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::Other, "Can't find avaliable port"))
 }
 
 impl UDPServer {
     pub async fn new(addr: &SocketAddr, config: UDPServerConfig) -> Result<Self> {
         let inner = Inner::new();
-        let inner2 = inner.clone();
         let (event_send, event_recv) = mpsc::channel::<Event>(100);
-        let socket = create_socket(addr).await?;
-        let peer_manager = PeerManager::new(config.ignore_idle);
-        let pm3 = peer_manager.clone();
+        let (local_addr, socket) = if config.find_free_port {
+            find_port(*addr).await?
+        } else {
+            (*addr, create_socket(addr).await?)
+        };
+        let (packet_tx, packet_rx) = packet_stream(socket);
+        let peer_manager = PeerManager::new(packet_tx.clone(), config.ignore_idle);
 
-        tokio::spawn(async {
-            if let Err(err) = Self::recv(inner2, socket, pm3, event_send, event_recv).await {
-                log::error!("recv thread exited. reason: {:?}", err);
-            }
-        });
+        Self::spawn_recv(&inner, &packet_tx, packet_rx, &peer_manager, &event_send);
+        Self::spawn_event(&inner, event_recv, &peer_manager);
+
         let info_sender = spawn_stream(&peer_manager, |pm| async move {
             server_info_from_peer(&pm).await
-        });
-        let traffic_sender = spawn_stream(&inner, |inner| async move {
-            let mut inner = inner.lock().await;
-            inner.clear_traffic();
-            inner.last_traffic_info.clone()
         });
 
         Ok(Self {
             peer_manager,
             info_sender,
-            traffic_sender,
             inner,
+            local_addr,
         })
     }
-    async fn recv(
-        inner: Arc<Mutex<Inner>>,
-        mut socket: UdpSocket,
-        peer_manager: PeerManager,
-        event_send: mpsc::Sender<Event>,
-        mut event_recv: mpsc::Receiver<Event>,
-    ) -> Result<()> {
-        loop {
-            let mut buffer = vec![0u8; 65536];
-            let (size, addr) = socket.recv_from(&mut buffer).await?;
-            buffer.truncate(size);
-            {
-                let traffic_info = &mut inner.lock().await.traffic_info;
-                let _ = traffic_info.download(result::Result::<_, ()>::Ok(size));
-            }
-
-            let frame = match ForwarderFrame::parse(&buffer) {
-                Ok(f) => f,
-                Err(_) => continue,
-            };
-            if let ForwarderFrame::Ping(ping) = &frame {
-                Self::send_client(inner.clone(), &mut socket, &addr, ping.build()).await;
-                continue
-            }
-            peer_manager.peer_mut(addr, &event_send, |peer| {
-                // ignore packet when channel is full
-                let _ = peer.on_packet(buffer);
-            }).await;
-
-
-            while let Ok(event) = event_recv.try_recv() {
-                match event {
-                    Event::Close(addr) => {
-                        peer_manager.remove(&addr).await;
-                    },
-                    Event::SendLAN(SendLANEvent{
-                        from,
-                        src_ip,
-                        dst_ip,
-                        packet
-                    }) => {
-                        let traffic_info = &mut inner.lock().await.traffic_info;
-                        log_warn(
-                            traffic_info.upload(
+    fn spawn_event(
+        inner: &Arc<Mutex<Inner>>,
+        event_recv: mpsc::Receiver<Event>,
+        peer_manager: &PeerManager,
+    ) {
+        let inner = inner.clone();
+        let peer_manager = peer_manager.clone();
+        tokio::spawn(async move {
+            Self::event_task(&inner, event_recv, &peer_manager).await
+        });
+    }
+    async fn event_task(
+        inner: &Arc<Mutex<Inner>>,
+        event_recv: mpsc::Receiver<Event>,
+        peer_manager: &PeerManager,
+    ) {
+        event_recv.for_each_concurrent(
+            4,
+            |event| {
+                let inner = inner.clone();
+                let peer_manager = peer_manager.clone();
+                async move {
+                    match event {
+                        Event::Close(addr) => {
+                            peer_manager.remove(&addr).await;
+                        },
+                        Event::SendLAN(from, out_packet) => {
+                            for (_, p) in &mut inner.lock().await.plugin {
+                                p.out_packet(&out_packet).await;
+                            }
+                            log_warn(
                                 peer_manager.send_lan(
-                                    &mut socket,
-                                    packet,
                                     from,
-                                    src_ip,
-                                    dst_ip,
-                                ).await
-                            ),
-                            "failed to send lan packet"
-                        );
-                    },
+                                    out_packet,
+                                ).await,
+                                "failed to send lan packet"
+                            );
+                        },
+                    }
                 }
             }
-        }
+        ).await
     }
-    async fn send_client(inner: Arc<Mutex<Inner>>, socket: &mut UdpSocket, addr: &SocketAddr, packet: Packet) {
-        let traffic_info = &mut inner.lock().await.traffic_info;
+    fn spawn_recv(
+        inner: &Arc<Mutex<Inner>>,
+        packet_tx: &PacketSender,
+        packet_rx: PacketReceiver,
+        peer_manager: &PeerManager,
+        event_send: &mpsc::Sender<Event>,
+    ) {
+        let inner = inner.clone();
+        let peer_manager = peer_manager.clone();
+        let packet_tx = packet_tx.clone();
+        let event_send = event_send.clone();
+        tokio::spawn(async move {
+            Self::recv_task(&inner, &packet_tx, packet_rx, &peer_manager, &event_send).await
+        });
+    }
+    async fn recv_task(
+        inner: &Arc<Mutex<Inner>>,
+        packet_tx: &PacketSender,
+        packet_rx: PacketReceiver,
+        peer_manager: &PeerManager,
+        event_send: &mpsc::Sender<Event>,
+    ) {
+        packet_rx.for_each_concurrent(
+            10,
+            |in_packet| {
+                let inner = inner.clone();
+                let peer_manager = peer_manager.clone();
+                let mut tx = packet_tx.clone();
+                let event_send = event_send.clone();
+                async move {
+                    let addr = *in_packet.addr();
+                    for (_, p) in &mut inner.lock().await.plugin {
+                        p.in_packet(&in_packet).await;
+                    }
+                    let frame = match ForwarderFrame::parse(in_packet.as_ref()) {
+                        Ok(f) => f,
+                        Err(_) => return,
+                    };
+                    if let ForwarderFrame::Ping(ping) = &frame {
+                        Self::send_client(&mut tx, vec![addr], ping.build()).await;
+                        return
+                    }
+                    peer_manager.peer_mut(&addr, &event_send, move |peer| {
+                        // ignore packet when channel is full
+                        let _ = peer.on_packet(in_packet);
+                    }).await;
+                }
+            }
+        ).await
+    }
+    async fn send_client(socket: &mut PacketSender, addr: Vec<SocketAddr>, packet: Packet) {
         log_warn(
-            traffic_info.upload(socket.send_to(&packet, addr).await),
+            socket.send((packet, addr)).await,
             "failed to send client packet",
         );
     }
@@ -194,19 +201,21 @@ impl UDPServer {
             .filter_same()
             .boxed()
     }
-    pub async fn traffic_info(&self) -> TrafficInfo {
-        self.inner.lock().await.last_traffic_info.clone()
+    pub async fn add_plugin(&self, typ: &BoxPluginType) {
+        let plugin = typ.new(Context::new(&self.peer_manager));
+        self.inner.lock().await.plugin.insert(typ.name(), plugin);
     }
-    pub async fn traffic_info_stream(&self) -> TrafficInfoStream {
-        let stream = self.traffic_sender
-            .subscribe()
-            .take_while(|info| future::ready(info.is_ok()))
-            .map(|info| info.unwrap());
-
-        stream::once(future::ready(self.traffic_info().await))
-            .chain(stream)
-            .filter_same()
-            .boxed()
+    pub async fn get_plugin<'a, T, F, R>(&'a self, typ: &BoxPluginType<T>, func: F) -> R
+    where
+        T: 'static,
+        F: Fn(Option<&T>) -> R
+    {
+        let inner = self.inner.lock().await;
+        let plugin = inner.plugin.get(&typ.name()).unwrap();
+        func(plugin.as_any().downcast_ref::<T>())
+    }
+    pub fn local_addr(&self) -> &SocketAddr {
+        &self.local_addr
     }
 }
 
@@ -225,13 +234,106 @@ impl UDPServerBuilder {
     pub fn new() -> UDPServerBuilder {
         UDPServerBuilder(UDPServerConfig {
             ignore_idle: false,
+            find_free_port: false,
         })
+    }
+    pub fn find_free_port(mut self, v: bool) -> Self {
+        self.0.find_free_port = v;
+        self
     }
     pub fn ignore_idle(mut self, v: bool) -> Self {
         self.0.ignore_idle = v;
         self
     }
     pub async fn build(self, addr: &SocketAddr) -> Result<UDPServer> {
-        UDPServer::new(addr, self.0).await
+        let udp_server = UDPServer::new(addr, self.0).await?;
+        plugin::register_plugins(&udp_server).await;
+        Ok(udp_server)
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::plugin::traffic::TRAFFIC_TYPE;
+    use super::UDPServerBuilder;
+    use tokio::net::UdpSocket;
+    use tokio::time::{Duration, timeout};
+    use smoltcp::wire::*;
+    use smoltcp::phy::ChecksumCapabilities;
+
+    const ADDR: &'static str = "127.0.0.1:12121";
+
+    #[tokio::test]
+    async fn test_get_plugin() {
+        let udp_server = UDPServerBuilder::new()
+            .find_free_port(true)
+            .build(&ADDR.parse().unwrap())
+            .await
+            .unwrap();
+        let traffic = udp_server.get_plugin(&TRAFFIC_TYPE, |traffic| {
+            traffic.map(Clone::clone)
+        }).await;
+        assert!(traffic.is_some(), true);
+    }
+
+    fn make_packet(src_addr: Ipv4Address, dst_addr: Ipv4Address) -> Vec<u8> {
+        let repr = Ipv4Repr {
+            src_addr,
+            dst_addr,
+            protocol:    IpProtocol::Udp,
+            payload_len: 0,
+            hop_limit:   64
+        };
+        let mut bytes = vec![0xa5; 1 + repr.buffer_len()];
+        let mut packet = Ipv4Packet::new_unchecked(&mut bytes[1..]);
+        repr.emit(&mut packet, &ChecksumCapabilities::default());
+        bytes[0] = 1;
+
+        bytes
+    }
+
+    async fn recv_packet(socket: &mut UdpSocket) -> Vec<u8> {
+        let mut buf = vec![0u8; 65536];
+        let size = timeout(
+            Duration::from_millis(100),
+            socket.recv(&mut buf)
+        ).await.unwrap().unwrap();
+        buf.truncate(size);
+
+        buf
+    }
+
+    #[tokio::test]
+    async fn test_server() {
+        let udp_server = UDPServerBuilder::new()
+            .find_free_port(true)
+            .build(&ADDR.parse().unwrap())
+            .await
+            .unwrap();
+        let addr = udp_server.local_addr();
+
+        let mut socket1 = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let mut socket2 = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let _ = socket1.connect(addr).await.unwrap();
+        let _ = socket2.connect(addr).await.unwrap();
+
+        let packet1 = make_packet(
+            Ipv4Address::new(10, 13, 37, 100),
+            Ipv4Address::new(10, 13, 37, 101)
+        );
+        let packet2 = make_packet(
+            Ipv4Address::new(10, 13, 37, 101),
+            Ipv4Address::new(10, 13, 37, 100)
+        );
+        socket1.send(&packet1).await.unwrap();
+        socket2.send(&packet2).await.unwrap();
+        socket1.send(&packet1).await.unwrap();
+
+        let recv1 = recv_packet(&mut socket1).await;
+        let recv2 = recv_packet(&mut socket2).await;
+
+        assert_eq!(recv1, packet2);
+        assert_eq!(recv2, packet1);
     }
 }

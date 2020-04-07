@@ -1,7 +1,11 @@
+#[macro_use]
+extern crate lazy_static;
+
 mod graphql;
 mod slp;
 mod graphql_ws_filter;
 mod util;
+mod plugin;
 
 use graphql::{schema, Context};
 use slp::UDPServerBuilder;
@@ -48,6 +52,7 @@ async fn main() -> std::io::Result<()> {
         .ignore_idle(ignore_idle)
         .build(socket_addr)
         .await?;
+
     let context = Context::new(udp_server, admin_token);
 
     log::info!("Listening on {}", bind_address);
@@ -63,7 +68,6 @@ async fn main() -> std::io::Result<()> {
             .and_then(server_info)
         .or(warp::post()
             .and(graphql_filter))
-        // TODO: enable ws until https://github.com/graphql-rust/juniper/issues/589 is fixed
         .or(
             warp::get()
             .and(graphql_ws_filter))
