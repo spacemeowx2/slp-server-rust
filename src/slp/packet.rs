@@ -51,7 +51,7 @@ impl AsRef<[u8]> for InPacket {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OutPacket(Packet, OutAddr);
 
 impl OutPacket {

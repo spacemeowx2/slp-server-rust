@@ -234,12 +234,12 @@ pub struct FragParser {
 }
 
 impl FragParser {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             cache: LruCache::new(50),
         }
     }
-    fn process<'a>(&mut self, frame: Ipv4Frag<'a>) -> Option<Packet> {
+    pub fn process<'a>(&mut self, frame: Ipv4Frag<'a>) -> Option<Packet> {
         let src_ip = frame.src_ip();
         let item = FragItem::from_frame(frame);
         let key = (src_ip, item.id);
