@@ -15,7 +15,7 @@ impl LdnMitm {
                 .for_each(move |_| {
                     let pm = peer_manager.clone();
                     async move {
-                        let _ = pm.send_lan(*HOST, PACKET.clone()).await;
+                        let _ = pm.send_broadcast(*HOST, PACKET.clone()).await;
                     }
                 })
                 .await;
