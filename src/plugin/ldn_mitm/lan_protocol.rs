@@ -86,6 +86,39 @@ impl<T: AsRef<[u8]>> LdnHeader<T> {
     }
 }
 
+pub struct NetworkInfo<T: AsRef<[u8]>> {
+    buffer: T,
+}
+impl<T: AsRef<[u8]>> NetworkInfo<T> {
+    pub fn new(buffer: T) -> NetworkInfo<T> {
+        NetworkInfo { buffer }
+    }
+    pub fn content_id_bytes(&self) -> [u8; 8] {
+        let mut ret = [0u8; 8];
+        ret.copy_from_slice(&self.buffer.as_ref()[0..8]);
+        ret.reverse();
+        ret
+    }
+    pub fn content_id(&self) -> u64 {
+        let mut data = &self.buffer.as_ref()[0..8];
+        data.get_u64_le()
+    }
+    pub fn host_player_name(&self) -> String {
+        let data = &self.buffer.as_ref()[0x74..0x74+32];
+        let data = data.iter().map(|i| *i).take_while(|i| *i != 0).collect();
+        String::from_utf8(data).unwrap_or("".to_string())
+    }
+}
+
+impl<T: AsRef<[u8]>> std::fmt::Debug for NetworkInfo<T> {
+    fn fmt(&self, w: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        w.debug_struct("NetworkInfo")
+            .field("content_id", &self.content_id())
+            .finish()
+    }
+}
+
+
 #[derive(Debug)]
 pub struct LdnPacket {
     typ: u8,
@@ -111,6 +144,12 @@ impl LdnPacket {
             typ: header.typ(),
             payload,
         })
+    }
+    pub fn typ(&self) -> u8 {
+        self.typ
+    }
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
     }
 }
 
