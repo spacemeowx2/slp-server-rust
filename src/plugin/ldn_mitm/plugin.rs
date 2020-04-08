@@ -1,8 +1,10 @@
 use crate::slp::plugin::*;
 use crate::slp::{FragParser, ForwarderFrame, Parser};
 use super::constants::*;
+use super::lan_protocol::LdnPacket;
 use tokio::time::{interval, Duration};
 use futures::prelude::*;
+use smoltcp::wire::{Ipv4Packet, UdpPacket, IpProtocol};
 
 pub struct LdnMitm {
     frag_parser: FragParser,
@@ -43,12 +45,30 @@ impl Plugin for LdnMitm {
             },
             _ => None,
         };
-        // match _packet {
-        //     Some((src_ip, dst_ip, packet)) if dst_ip == SERVER_ADDR => {
-        //         println!("-> {:?}: {:?}", src_ip, packet);
-        //     },
-        //     _ => (),
-        // }
+        match _packet {
+            Some((src_ip, dst_ip, packet)) if dst_ip == SERVER_ADDR => {
+                let mut packet = match Ipv4Packet::new_checked(packet) {
+                    Ok(p) => p,
+                    _ => return,
+                };
+                if packet.protocol() != IpProtocol::Udp {
+                    return
+                }
+                let payload = packet.payload_mut();
+                let mut packet = match UdpPacket::new_checked(payload) {
+                    Ok(p) => p,
+                    _ => return,
+                };
+                let payload = packet.payload_mut();
+
+                let packet = match LdnPacket::new(payload) {
+                    Ok(p) => p,
+                    _ => return,
+                };
+                // println!("-> {:?}: {:?}", src_ip, packet);
+            },
+            _ => (),
+        }
     }
     async fn out_packet(&mut self, _packet: &OutPacket) {}
 }
