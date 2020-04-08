@@ -6,7 +6,7 @@ pub use plugin::*;
 
 
 mod constants {
-    use std::net::{SocketAddr, Ipv4Addr};
+    use std::net::Ipv4Addr;
     use crate::slp::plugin::*;
     use crate::slp::OutAddr;
     use super::util::*;
@@ -26,7 +26,6 @@ mod constants {
                 0, 0,                       // reversed
             ]
         };
-        pub static ref HOST: SocketAddr = SocketAddr::new(Ipv4Addr::new(10, 13, 37, 1).into(), 0);
         pub static ref PACKET: OutPacket = {
             let mut bytes = make_udp(&SCAN_PACKET);
             bytes.insert(0, 1);

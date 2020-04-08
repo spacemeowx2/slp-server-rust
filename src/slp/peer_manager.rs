@@ -67,14 +67,12 @@ impl PeerManager {
         };
         func(peer)
     }
-    pub async fn send_broadcast(&self, from: SocketAddr, packet: OutPacket) -> std::result::Result<usize, SendError> {
-        let (packet, out_addr) = packet.split();
+    pub async fn send_broadcast(&self, packet: OutPacket) -> std::result::Result<usize, SendError> {
+        let (packet, _) = packet.split();
         let len = packet.len();
         let inner = &mut self.inner.write().await;
         let mut packet_tx = inner.packet_tx.clone();
-        inner.map.insert(*out_addr.src_ip(), from);
         let addrs = inner.cache.iter()
-            .filter(|(addr, _) | &&from != addr)
             .map(|(addr, _)| *addr)
             .collect::<Vec<_>>();
         let size: usize = addrs.len() * len;
