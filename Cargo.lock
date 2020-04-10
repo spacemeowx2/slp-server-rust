@@ -339,12 +339,6 @@ checksum = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 
 [[package]]
 name = "futures"
-version = "0.1.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b980f2816d6ee8673b6517b52cb0e808a180efc92e5c19d02cdda79066703ef"
-
-[[package]]
-name = "futures"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f16056ecbb57525ff698bb955162d0cd03bee84e6241c27ff75c08d8ca5987"
@@ -421,7 +415,6 @@ version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22766cf25d64306bedf0384da004d05c9974ab104fcc4528f1236181c18004c5"
 dependencies = [
- "futures 0.1.29",
  "futures-channel",
  "futures-core",
  "futures-io",
@@ -638,12 +631,12 @@ checksum = "b8b7a7c0c47db5545ed3fef7468ee7bb5b74691498139e4b3f6a20685dc6dd8e"
 [[package]]
 name = "juniper"
 version = "0.14.2"
-source = "git+https://github.com/graphql-rust/juniper?rev=dbe2c67cb891c92588fb41fa45421778f969a826#dbe2c67cb891c92588fb41fa45421778f969a826"
+source = "git+https://github.com/spacemeowx2/juniper?rev=95686b7ce530538d14bd42aafd47e07989dc9c2a#95686b7ce530538d14bd42aafd47e07989dc9c2a"
 dependencies = [
  "bson",
  "chrono",
  "fnv",
- "futures 0.3.1",
+ "futures",
  "indexmap",
  "juniper_codegen",
  "serde",
@@ -655,9 +648,9 @@ dependencies = [
 [[package]]
 name = "juniper_codegen"
 version = "0.14.2"
-source = "git+https://github.com/graphql-rust/juniper?rev=dbe2c67cb891c92588fb41fa45421778f969a826#dbe2c67cb891c92588fb41fa45421778f969a826"
+source = "git+https://github.com/spacemeowx2/juniper?rev=95686b7ce530538d14bd42aafd47e07989dc9c2a#95686b7ce530538d14bd42aafd47e07989dc9c2a"
 dependencies = [
- "futures 0.3.1",
+ "futures",
  "proc-macro-error",
  "proc-macro2",
  "quote",
@@ -667,19 +660,19 @@ dependencies = [
 [[package]]
 name = "juniper_subscriptions"
 version = "0.14.2"
-source = "git+https://github.com/graphql-rust/juniper?rev=dbe2c67cb891c92588fb41fa45421778f969a826#dbe2c67cb891c92588fb41fa45421778f969a826"
+source = "git+https://github.com/spacemeowx2/juniper?rev=95686b7ce530538d14bd42aafd47e07989dc9c2a#95686b7ce530538d14bd42aafd47e07989dc9c2a"
 dependencies = [
- "futures 0.3.1",
+ "futures",
  "juniper",
 ]
 
 [[package]]
 name = "juniper_warp"
 version = "0.5.2"
-source = "git+https://github.com/graphql-rust/juniper?rev=dbe2c67cb891c92588fb41fa45421778f969a826#dbe2c67cb891c92588fb41fa45421778f969a826"
+source = "git+https://github.com/spacemeowx2/juniper?rev=95686b7ce530538d14bd42aafd47e07989dc9c2a#95686b7ce530538d14bd42aafd47e07989dc9c2a"
 dependencies = [
  "failure",
- "futures 0.3.1",
+ "futures",
  "juniper",
  "juniper_subscriptions",
  "serde",
@@ -1385,7 +1378,7 @@ checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 
 [[package]]
 name = "slp-server-rust"
-version = "2.0.0-rust.alpha.5"
+version = "2.0.0-rust.alpha.6"
 dependencies = [
  "async-trait",
  "bencher",
@@ -1393,7 +1386,7 @@ dependencies = [
  "clap",
  "downcast-rs",
  "env_logger",
- "futures 0.3.1",
+ "futures",
  "futures-util",
  "hex 0.4.2",
  "juniper",
@@ -1564,7 +1557,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8b8fe88007ebc363512449868d7da4389c9400072a3f666f212c7280082882a"
 dependencies = [
- "futures 0.3.1",
+ "futures",
  "log 0.4.8",
  "pin-project",
  "tokio",
@@ -1743,7 +1736,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54cd1e2b3eb3539284d88b76a9afcf5e20f2ef2fab74db5b21a1c30d7d945e82"
 dependencies = [
  "bytes",
- "futures 0.3.1",
+ "futures",
  "headers",
  "http",
  "hyper",
