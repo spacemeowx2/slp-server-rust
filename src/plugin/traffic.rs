@@ -56,8 +56,8 @@ impl Inner {
     async fn in_packet(&mut self, packet: &InPacket) {
         self.0.lock().await.0.download(packet.as_ref().len() as i32)
     }
-    async fn out_packet(&mut self, packet: &OutPacket) {
-        self.0.lock().await.0.upload(packet.as_ref().len() as i32)
+    async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) {
+        self.0.lock().await.0.upload((packet.len() * addrs.len()) as i32)
     }
     async fn traffic_info(&self) -> TrafficInfo {
         self.0.lock().await.0.clone()
@@ -98,8 +98,8 @@ impl Plugin for Traffic {
     async fn in_packet(&mut self, packet: &InPacket) {
         self.0.in_packet(packet).await
     }
-    async fn out_packet(&mut self, packet: &OutPacket) {
-        self.0.out_packet(packet).await
+    async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) {
+        self.0.out_packet(packet, addrs).await
     }
 }
 

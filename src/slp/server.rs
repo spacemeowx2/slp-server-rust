@@ -114,13 +114,15 @@ impl UDPServer {
                             peer_manager.remove(&addr).await;
                         },
                         Event::SendLAN(from, out_packet) => {
+                            let (packet, out_addr) = out_packet.split();
+                            let addrs = peer_manager.get_dest_sockaddr(from, out_addr).await;
                             for (_, p) in &mut inner.lock().await.plugin {
-                                p.out_packet(&out_packet).await;
+                                p.out_packet(&packet, &addrs).await;
                             }
                             log_warn(
                                 peer_manager.send_lan(
-                                    from,
-                                    out_packet,
+                                    packet,
+                                    addrs,
                                 ).await,
                                 "failed to send lan packet"
                             );

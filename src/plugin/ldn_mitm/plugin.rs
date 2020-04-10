@@ -107,7 +107,7 @@ impl Plugin for LdnMitm {
             _ => (),
         }
     }
-    async fn out_packet(&mut self, _packet: &OutPacket) {}
+    async fn out_packet(&mut self, _packet: &Packet, _addrs: &[SocketAddr]) {}
 }
 
 pub struct LdnMitmType;

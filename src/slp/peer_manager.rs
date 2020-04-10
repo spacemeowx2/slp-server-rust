@@ -1,7 +1,7 @@
 use tokio::sync::{RwLock, mpsc};
 use std::net::{SocketAddr, Ipv4Addr};
 use std::sync::Arc;
-use super::{Event, Peer, OutPacket, PacketSender, Packet, SendError};
+use super::{Event, Peer, OutPacket, OutAddr, PacketSender, Packet, SendError};
 use std::collections::HashMap;
 
 pub struct PeerManagerInfo {
@@ -79,31 +79,32 @@ impl PeerManager {
         packet_tx.send((packet, addrs)).await?;
         Ok(size)
     }
-    pub async fn send_lan(
-        &self,
-        from: SocketAddr,
-        packet: OutPacket,
-    ) -> std::result::Result<usize, SendError>
-    {
-        let (packet, out_addr) = packet.split();
-        let len = packet.len();
+    pub async fn get_dest_sockaddr(&self, from: SocketAddr, out_addr: OutAddr) -> Vec<SocketAddr> {
         let inner = &mut self.inner.write().await;
-        let mut packet_tx = inner.packet_tx.clone();
         inner.map.insert(*out_addr.src_ip(), from);
         if let Some(addr) = inner.map.get(&out_addr.dst_ip()) {
-            let packet: Packet = packet.into();
-            packet_tx.send((packet, vec![*addr])).await?;
-            Ok(len)
+            vec![*addr]
         } else {
             let addrs = inner.cache.iter()
                 .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
                 .filter(|(addr, _) | &&from != addr)
                 .map(|(addr, _)| *addr)
                 .collect::<Vec<_>>();
-            let size: usize = addrs.len() * len;
-            packet_tx.send((packet, addrs)).await?;
-            Ok(size)
+            addrs
         }
+    }
+    pub async fn send_lan(
+        &self,
+        packet: Packet,
+        addrs: Vec<SocketAddr>,
+    ) -> std::result::Result<usize, SendError>
+    {
+        let len = packet.len();
+        let size: usize = addrs.len() * len;
+        let inner = &mut self.inner.write().await;
+        let mut packet_tx = inner.packet_tx.clone();
+        packet_tx.send((packet, addrs)).await?;
+        Ok(size)
     }
     pub async fn server_info(&self) -> PeerManagerInfo {
         let inner = &self.inner.read().await;
