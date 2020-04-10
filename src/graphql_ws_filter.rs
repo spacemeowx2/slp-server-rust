@@ -33,7 +33,7 @@ where
                     graphql_subscriptions(websocket, coordinator, ctx)
                         .map(|r| {
                             if let Err(e) = r {
-                                println!("Ws error: {}", e);
+                                log::debug!("WebSocket error: {}", e);
                             }
                         })
                         .boxed()
