@@ -19,12 +19,8 @@ pub fn packet_stream(mut socket: UdpSocket) -> (PacketSender, PacketReceiver) {
                     buf.truncate(size);
                     let in_packet = InPacket::new(addr, buf);
 
-                    match in_packet_tx.send_timeout(in_packet, ACTION_TIMEOUT).await {
-                        Ok(_) => (),
-                        Err(e) => {
-                            log::error!("send_timeout err {:?}", e);
-                        }
-                    }
+                    // TODO: ignore packet drop now. maybe a counter in the future
+                    let _ = in_packet_tx.send_timeout(in_packet, ACTION_TIMEOUT).await;
                 },
                 Some((packet, addrs)) = out_packet_rx.recv() => {
                     for addr in addrs {

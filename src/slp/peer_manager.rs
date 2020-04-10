@@ -67,6 +67,18 @@ impl PeerManager {
         };
         func(peer)
     }
+    pub async fn send_broadcast(&self, packet: OutPacket) -> std::result::Result<usize, SendError> {
+        let (packet, _) = packet.split();
+        let len = packet.len();
+        let inner = &mut self.inner.write().await;
+        let mut packet_tx = inner.packet_tx.clone();
+        let addrs = inner.cache.iter()
+            .map(|(addr, _)| *addr)
+            .collect::<Vec<_>>();
+        let size: usize = addrs.len() * len;
+        packet_tx.send((packet, addrs)).await?;
+        Ok(size)
+    }
     pub async fn send_lan(
         &self,
         from: SocketAddr,

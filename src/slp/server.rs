@@ -8,7 +8,6 @@ use juniper::GraphQLObject;
 use futures::stream::{StreamExt, BoxStream};
 use futures::prelude::*;
 use crate::util::{FilterSameExt, create_socket};
-use crate::plugin;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -214,6 +213,7 @@ impl UDPServer {
         let plugin = inner.plugin.get(&typ.name()).unwrap();
         func(plugin.as_any().downcast_ref::<T>())
     }
+    #[allow(dead_code)]
     pub fn local_addr(&self) -> &SocketAddr {
         &self.local_addr
     }
@@ -237,6 +237,7 @@ impl UDPServerBuilder {
             find_free_port: false,
         })
     }
+    #[allow(dead_code)]
     pub fn find_free_port(mut self, v: bool) -> Self {
         self.0.find_free_port = v;
         self
@@ -247,7 +248,6 @@ impl UDPServerBuilder {
     }
     pub async fn build(self, addr: &SocketAddr) -> Result<UDPServer> {
         let udp_server = UDPServer::new(addr, self.0).await?;
-        plugin::register_plugins(&udp_server).await;
         Ok(udp_server)
     }
 }
@@ -255,12 +255,10 @@ impl UDPServerBuilder {
 
 #[cfg(test)]
 mod test {
-    use crate::plugin::traffic::TRAFFIC_TYPE;
+    use crate::plugin::{self, traffic::TRAFFIC_TYPE};
     use super::UDPServerBuilder;
-    use tokio::net::UdpSocket;
-    use tokio::time::{Duration, timeout};
+    use crate::test::{make_server, make_packet, recv_packet, client_connect};
     use smoltcp::wire::*;
-    use smoltcp::phy::ChecksumCapabilities;
 
     const ADDR: &'static str = "127.0.0.1:12121";
 
@@ -271,52 +269,19 @@ mod test {
             .build(&ADDR.parse().unwrap())
             .await
             .unwrap();
+        plugin::register_plugins(&udp_server).await;
         let traffic = udp_server.get_plugin(&TRAFFIC_TYPE, |traffic| {
             traffic.map(Clone::clone)
         }).await;
         assert!(traffic.is_some(), true);
     }
 
-    fn make_packet(src_addr: Ipv4Address, dst_addr: Ipv4Address) -> Vec<u8> {
-        let repr = Ipv4Repr {
-            src_addr,
-            dst_addr,
-            protocol:    IpProtocol::Udp,
-            payload_len: 0,
-            hop_limit:   64
-        };
-        let mut bytes = vec![0xa5; 1 + repr.buffer_len()];
-        let mut packet = Ipv4Packet::new_unchecked(&mut bytes[1..]);
-        repr.emit(&mut packet, &ChecksumCapabilities::default());
-        bytes[0] = 1;
-
-        bytes
-    }
-
-    async fn recv_packet(socket: &mut UdpSocket) -> Vec<u8> {
-        let mut buf = vec![0u8; 65536];
-        let size = timeout(
-            Duration::from_millis(100),
-            socket.recv(&mut buf)
-        ).await.unwrap().unwrap();
-        buf.truncate(size);
-
-        buf
-    }
-
     #[tokio::test]
     async fn test_server() {
-        let udp_server = UDPServerBuilder::new()
-            .find_free_port(true)
-            .build(&ADDR.parse().unwrap())
-            .await
-            .unwrap();
-        let addr = udp_server.local_addr();
+        let (_udp_server, addr) = make_server().await;
 
-        let mut socket1 = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-        let mut socket2 = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-        let _ = socket1.connect(addr).await.unwrap();
-        let _ = socket2.connect(addr).await.unwrap();
+        let mut socket1 = client_connect(addr).await;
+        let mut socket2 = client_connect(addr).await;
 
         let packet1 = make_packet(
             Ipv4Address::new(10, 13, 37, 100),

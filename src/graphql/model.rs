@@ -1,6 +1,7 @@
 use juniper::{EmptyMutation, FieldError, RootNode, Value};
 use crate::slp::{UDPServer, ServerInfo};
 use crate::plugin::traffic::{TrafficInfo, TRAFFIC_TYPE};
+use crate::plugin::ldn_mitm::{LDN_MITM_TYPE, RoomInfo};
 use futures::stream::BoxStream;
 use std::sync::Arc;
 
@@ -49,6 +50,18 @@ impl Query {
             }
         } else {
             Err(FieldError::new("Permission denied", Value::null()))
+        }
+    }
+    /// Current rooms
+    async fn room(context: &Context) -> Result<Vec<RoomInfo>, FieldError> {
+        let r = context.udp_server
+            .get_plugin(&LDN_MITM_TYPE, |ldn_mitm| {
+                ldn_mitm.map(|i| i.room_info())
+            })
+            .await;
+        match r {
+            Some(r) => Ok(r.lock().await.iter().map(|(_, v)| v.clone()).collect()),
+            None => Err(FieldError::new("This plugin is not available", Value::null())),
         }
     }
 }

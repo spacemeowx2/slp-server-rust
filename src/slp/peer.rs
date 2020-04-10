@@ -51,7 +51,7 @@ impl Peer {
         });
         Self {
             sender: tx,
-            state: PeerState::Idle,
+            state: PeerState::Connected(Instant::now()),
         }
     }
     pub fn on_packet(&mut self, data: InPacket) -> std::result::Result<(), Box<dyn std::error::Error>> {

@@ -6,6 +6,8 @@ mod slp;
 mod graphql_ws_filter;
 mod util;
 mod plugin;
+#[cfg(test)]
+mod test;
 
 use graphql::{schema, Context};
 use slp::UDPServerBuilder;
@@ -52,6 +54,7 @@ async fn main() -> std::io::Result<()> {
         .ignore_idle(ignore_idle)
         .build(socket_addr)
         .await?;
+    plugin::register_plugins(&udp_server).await;
 
     let context = Context::new(udp_server, admin_token);
 

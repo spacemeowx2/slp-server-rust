@@ -1,5 +1,7 @@
 use std::net::Ipv4Addr;
-use super::packet::OutAddr;
+use lru::LruCache;
+use bytes::Buf;
+use super::packet::{Packet, OutAddr};
 
 mod forwarder_type {
     pub const KEEPALIVE: u8   = 0;
@@ -11,10 +13,17 @@ mod forwarder_type {
 }
 mod field {
     pub type Field = ::core::ops::Range<usize>;
+    pub type FieldFrom = ::core::ops::RangeFrom<usize>;
     pub const SRC_IP: Field = 12..16;
     pub const DST_IP: Field = 16..20;
     pub const FRAG_SRC_IP: Field = 0..4;
     pub const FRAG_DST_IP: Field = 4..8;
+    pub const FRAG_ID: Field = 8..10;
+    pub const FRAG_PART: usize = 10;
+    pub const FRAG_TOTAL_PART: usize = 11;
+    pub const FRAG_LEN: Field = 12..14;
+    pub const FRAG_PMTU: Field = 14..16;
+    pub const FRAG_DATA: FieldFrom = 16..;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -113,6 +122,9 @@ impl<'a> Ipv4<'a> {
         octets.copy_from_slice(&self.payload[field::DST_IP]);
         octets.into()
     }
+    pub fn data(&self) -> &[u8] {
+        &self.payload
+    }
 }
 
 #[derive(Debug)]
@@ -127,7 +139,7 @@ impl<'a> Into<OutAddr> for Ipv4Frag<'a> {
 }
 
 impl<'a> Parser<'a> for Ipv4Frag<'a> {
-    const MIN_LENGTH: usize = 20;
+    const MIN_LENGTH: usize = 16;
     fn do_parse(bytes: &'a [u8]) -> Result<Ipv4Frag> {
         Ok(Ipv4Frag { payload: bytes })
     }
@@ -143,6 +155,27 @@ impl<'a> Ipv4Frag<'a> {
         let mut octets = [0u8; 4];
         octets.copy_from_slice(&self.payload[field::FRAG_DST_IP]);
         octets.into()
+    }
+    pub fn id(&self) -> u16 {
+        let mut buf = &self.payload[field::FRAG_ID];
+        buf.get_u16()
+    }
+    pub fn part(&self) -> u8 {
+        self.payload[field::FRAG_PART]
+    }
+    pub fn total_part(&self) -> u8 {
+        self.payload[field::FRAG_TOTAL_PART]
+    }
+    pub fn len(&self) -> u16 {
+        let mut buf = &self.payload[field::FRAG_LEN];
+        buf.get_u16()
+    }
+    pub fn pmtu(&self) -> u16 {
+        let mut buf = &self.payload[field::FRAG_PMTU];
+        buf.get_u16()
+    }
+    pub fn data(&self) -> &[u8] {
+        &self.payload[field::FRAG_DATA]
     }
 }
 
@@ -165,5 +198,129 @@ impl<'a> Ping<'a> {
         let mut out = vec![forwarder_type::PING];
         out.extend_from_slice(&self.payload[0..4]);
         out
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FragItem {
+    src_ip: Ipv4Addr,
+    dst_ip: Ipv4Addr,
+    id: u16,
+    part: u8,
+    total_part: u8,
+    len: u16,
+    pmtu: u16,
+    data: Packet,
+}
+
+impl FragItem {
+    fn from_frame<'a>(frag: Ipv4Frag<'a>) -> Self {
+        FragItem {
+            src_ip: frag.src_ip(),
+            dst_ip: frag.dst_ip(),
+            id: frag.id(),
+            part: frag.part(),
+            total_part: frag.total_part(),
+            len: frag.len(),
+            pmtu: frag.pmtu(),
+            data: Vec::from(frag.data()),
+        }
+    }
+}
+
+type FragParserKey = (Ipv4Addr, u16);
+pub struct FragParser {
+    cache: LruCache<
+        FragParserKey,
+        Vec<Option<FragItem>>,
+    >,
+}
+
+impl FragParser {
+    pub fn new() -> Self {
+        Self {
+            cache: LruCache::new(50),
+        }
+    }
+    pub fn process<'a>(&mut self, frame: Ipv4Frag<'a>) -> Option<Packet> {
+        let src_ip = frame.src_ip();
+        let item = FragItem::from_frame(frame);
+        let key = (src_ip, item.id);
+        let list = if let Some(list) = self.cache.get_mut(&key) {
+            list
+        } else {
+            let mut vec = Vec::new();
+            vec.resize(item.total_part as usize, None);
+            self.cache.put(key, vec);
+            self.cache.get_mut(&key).unwrap()
+        };
+        let part = item.part as usize;
+        list[part] = Some(item);
+        if list.iter().all(|i| i.is_some()) {
+            let list: Vec<_> = self.cache.pop(&key).unwrap().into_iter().map(Option::unwrap).collect();
+            let size: usize = list.iter().fold(0, |acc, item| acc + item.len as usize);
+            let mut packet = vec![0u8; size];
+            for i in list {
+                let start = i.pmtu as usize * i.part as usize;
+                packet[start..start + i.len as usize].copy_from_slice(&i.data);
+            }
+            Some(packet)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{FragParser, Ipv4Frag, Parser};
+
+    #[tokio::test]
+    async fn frag_parser() {
+        let mut parser = FragParser::new();
+        let frag1 = Ipv4Frag::parse(&[
+            10, 13, 37, 100, // src_ip
+            10, 13, 37, 101, // dst_ip
+            0, 1,            // id
+            0,               // part
+            2,               // total_part
+            0, 3,            // len
+            0, 3,            // pmtu
+            0, 1, 2          // data
+        ]).unwrap();
+        let frag2 = Ipv4Frag::parse(&[
+            10, 13, 37, 101, // src_ip
+            10, 13, 37, 100, // dst_ip
+            0, 1,            // id
+            1,               // part
+            2,               // total_part
+            0, 2,            // len
+            0, 3,            // pmtu
+            3, 4             // data
+        ]).unwrap();
+        let frag3 = Ipv4Frag::parse(&[
+            10, 13, 37, 101, // src_ip
+            10, 13, 37, 100, // dst_ip
+            0, 1,            // id
+            0,               // part
+            2,               // total_part
+            0, 3,            // len
+            0, 3,            // pmtu
+            0, 1, 2          // data
+        ]).unwrap();
+        let frag4 = Ipv4Frag::parse(&[
+            10, 13, 37, 100, // src_ip
+            10, 13, 37, 101, // dst_ip
+            0, 1,            // id
+            1,               // part
+            2,               // total_part
+            0, 2,            // len
+            0, 3,            // pmtu
+            3, 4             // data
+        ]).unwrap();
+        assert_eq!(parser.process(frag1), None);
+        assert_eq!(parser.process(frag2), None);
+        assert_eq!(parser.process(frag3).unwrap(), vec![0, 1, 2, 3, 4]);
+        assert_eq!(parser.process(frag4).unwrap(), vec![0, 1, 2, 3, 4]);
     }
 }
