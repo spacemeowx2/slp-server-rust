@@ -213,6 +213,7 @@ impl UDPServer {
         let plugin = inner.plugin.get(&typ.name()).unwrap();
         func(plugin.as_any().downcast_ref::<T>())
     }
+    #[allow(dead_code)]
     pub fn local_addr(&self) -> &SocketAddr {
         &self.local_addr
     }
@@ -236,6 +237,7 @@ impl UDPServerBuilder {
             find_free_port: false,
         })
     }
+    #[allow(dead_code)]
     pub fn find_free_port(mut self, v: bool) -> Self {
         self.0.find_free_port = v;
         self
