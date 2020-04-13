@@ -8,6 +8,7 @@ mod util;
 mod plugin;
 #[cfg(test)]
 mod test;
+mod panic;
 
 use graphql::{schema, Context};
 use slp::UDPServerBuilder;
@@ -38,6 +39,7 @@ fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     env_logger::from_env(Env::default().default_filter_or("slp_server_rust=info")).init();
+    panic::set_panic_hook();
     let matches = get_matches();
 
     let port: u16 = matches.value_of("port").unwrap_or("11451").parse().expect("Can't parse port");
