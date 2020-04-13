@@ -3,6 +3,7 @@ use bytes::Buf;
 #[derive(Debug)]
 pub enum Error {
     Truncated,
+    Invalid,
     DecompressFailed,
 }
 pub type Result<T> = std::result::Result<T, Error>;
@@ -90,8 +91,12 @@ pub struct NetworkInfo<T: AsRef<[u8]>> {
     buffer: T,
 }
 impl<T: AsRef<[u8]>> NetworkInfo<T> {
-    pub fn new(buffer: T) -> NetworkInfo<T> {
-        NetworkInfo { buffer }
+    pub fn new(buffer: T) -> Result<NetworkInfo<T>> {
+        if buffer.as_ref().len() != 0x480 {
+            Err(Error::Invalid)
+        } else {
+            Ok(NetworkInfo { buffer })
+        }
     }
     pub fn content_id_bytes(&self) -> [u8; 8] {
         let mut ret = [0u8; 8];
