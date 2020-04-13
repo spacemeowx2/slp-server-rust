@@ -1,0 +1,22 @@
+{
+    "tasks": [
+        {
+            "type": "cargo",
+            "label": "cargo test",
+            "command": "cargo test",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "type": "cargo",
+            "label": "cargo build",
+            "command": "cargo build",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
