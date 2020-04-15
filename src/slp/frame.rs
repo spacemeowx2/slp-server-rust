@@ -262,7 +262,11 @@ impl FragParser {
             let mut packet = vec![0u8; size];
             for i in list {
                 let start = i.pmtu as usize * i.part as usize;
-                packet[start..start + i.len as usize].copy_from_slice(&i.data);
+                let end = start + i.len as usize;
+                if end > packet.len() {
+                    return None
+                }
+                packet[start..end].copy_from_slice(&i.data);
             }
             Some(packet)
         } else {
@@ -322,5 +326,32 @@ mod test {
         assert_eq!(parser.process(frag2), None);
         assert_eq!(parser.process(frag3).unwrap(), vec![0, 1, 2, 3, 4]);
         assert_eq!(parser.process(frag4).unwrap(), vec![0, 1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn frag_parser_fix_panic() {
+        let mut parser = FragParser::new();
+        let frag1 = Ipv4Frag::parse(&[
+            10, 13, 37, 100, // src_ip
+            10, 13, 37, 101, // dst_ip
+            0, 1,            // id
+            0,               // part
+            2,               // total_part
+            0, 3,            // len
+            0, 3,            // pmtu
+            0, 1, 2          // data
+        ]).unwrap();
+        let frag2 = Ipv4Frag::parse(&[
+            10, 13, 37, 100, // src_ip
+            10, 13, 37, 101, // dst_ip
+            0, 1,            // id
+            1,               // part
+            2,               // total_part
+            0, 2,            // len
+            0, 4,            // * wrong pmtu
+            3, 4             // data
+        ]).unwrap();
+        assert_eq!(parser.process(frag1), None);
+        assert_eq!(parser.process(frag2), None);
     }
 }
