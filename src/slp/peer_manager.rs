@@ -56,15 +56,7 @@ impl PeerManager {
         F: FnOnce(&mut Peer) -> ()
     {
         let cache = &mut self.inner.write().await.cache;
-        let peer = {
-            if cache.get(addr).is_none() {
-                cache.insert(
-                    *addr,
-                    Peer::new(*addr, event_send.clone())
-                );
-            }
-            cache.get_mut(addr).unwrap()
-        };
+        let peer = cache.entry(*addr).or_insert_with(|| Peer::new(*addr, event_send.clone()));
         func(peer)
     }
     pub async fn send_broadcast(&self, packet: OutPacket) -> std::result::Result<usize, SendError> {

@@ -96,13 +96,15 @@ impl Plugin for LdnMitm {
                 if packet.typ() != 1 {
                     return
                 }
-                let info = NetworkInfo::new(packet.payload());
+                let info = match NetworkInfo::new(packet.payload()) {
+                    Ok(info) => info,
+                    _ => return,
+                };
                 self.room_info.lock().await.insert(info.content_id(), RoomInfo {
                     ip: src_ip.to_string(),
                     content_id: hex::encode(info.content_id_bytes()),
                     host_player_name: info.host_player_name(),
                 });
-                // println!("-> {:?}: {:?}", src_ip, packet);
             },
             _ => (),
         }
