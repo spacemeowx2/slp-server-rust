@@ -255,7 +255,10 @@ impl FragParser {
             self.cache.get_mut(&key).unwrap()
         };
         let part = item.part as usize;
-        list[part] = Some(item);
+        match list.get_mut(part) {
+            Some(v) => *v = Some(item),
+            None => return None,
+        };
         if list.iter().all(|i| i.is_some()) {
             let list: Vec<_> = self.cache.pop(&key).unwrap().into_iter().map(Option::unwrap).collect();
             let size: usize = list.iter().fold(0, |acc, item| acc + item.len as usize);
@@ -263,10 +266,10 @@ impl FragParser {
             for i in list {
                 let start = i.pmtu as usize * i.part as usize;
                 let end = start + i.len as usize;
-                if end > packet.len() {
-                    return None
+                match packet.get_mut(start..end) {
+                    Some(s) => s.copy_from_slice(&i.data),
+                    None => return None,
                 }
-                packet[start..end].copy_from_slice(&i.data);
             }
             Some(packet)
         } else {
@@ -351,7 +354,18 @@ mod test {
             0, 4,            // * wrong pmtu
             3, 4             // data
         ]).unwrap();
+        let frag3 = Ipv4Frag::parse(&[
+            10, 13, 37, 100, // src_ip
+            10, 13, 37, 101, // dst_ip
+            0, 1,            // id
+            10,              // * wrong part
+            2,               // total_part
+            0, 2,            // len
+            0, 3,            // pmtu
+            3, 4             // data
+        ]).unwrap();
         assert_eq!(parser.process(frag1), None);
         assert_eq!(parser.process(frag2), None);
+        assert_eq!(parser.process(frag3), None);
     }
 }
