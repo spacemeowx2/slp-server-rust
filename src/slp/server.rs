@@ -2,7 +2,7 @@ use tokio::io::Result;
 use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, mpsc, broadcast};
 use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
-use super::{packet_stream, PacketSender, PacketReceiver};
+use super::{packet_stream, PacketSender, PacketReceiver, BoxedAuthProvider};
 use serde::Serialize;
 use juniper::GraphQLObject;
 use futures::stream::{StreamExt, BoxStream};
@@ -28,6 +28,7 @@ pub struct ServerInfo {
 pub struct UDPServerConfig {
     ignore_idle: bool,
     find_free_port: bool,
+    auth_provider: Option<BoxedAuthProvider>,
 }
 
 pub struct Inner {
@@ -237,6 +238,7 @@ impl UDPServerBuilder {
         UDPServerBuilder(UDPServerConfig {
             ignore_idle: false,
             find_free_port: false,
+            auth_provider: None,
         })
     }
     #[allow(dead_code)]
@@ -246,6 +248,10 @@ impl UDPServerBuilder {
     }
     pub fn ignore_idle(mut self, v: bool) -> Self {
         self.0.ignore_idle = v;
+        self
+    }
+    pub fn auth_provider(mut self, v: Option<BoxedAuthProvider>) -> Self {
+        self.0.auth_provider = v;
         self
     }
     pub async fn build(self, addr: &SocketAddr) -> Result<UDPServer> {

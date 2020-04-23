@@ -11,7 +11,7 @@ mod test;
 mod panic;
 
 use graphql::{schema, Context};
-use slp::UDPServerBuilder;
+use slp::{UDPServerBuilder, simple_auth_provider::SimpleAuthProvider};
 use std::net::SocketAddr;
 use serde::Serialize;
 use std::convert::Infallible;
@@ -43,6 +43,7 @@ async fn main() -> std::io::Result<()> {
 
     let port: u16 = matches.value_of("port").unwrap_or("11451").parse().expect("Can't parse port");
     let ignore_idle = matches.is_present("ignore_idle");
+    let simple_auth = matches.value_of("simple_auth");
     if ignore_idle {
         log::info!("--ignore-idle is not tested, bugs are expected");
     }
@@ -51,10 +52,14 @@ async fn main() -> std::io::Result<()> {
     let bind_address = format!("{}:{}", "0.0.0.0", port);
     let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
 
-    let udp_server = UDPServerBuilder::new()
-        .ignore_idle(ignore_idle)
-        .build(socket_addr)
-        .await?;
+    let mut udp_server_builder = UDPServerBuilder::new()
+        .ignore_idle(ignore_idle);
+    if let Some(username_password) = simple_auth {
+        udp_server_builder = udp_server_builder.auth_provider(Some(
+            Box::new(SimpleAuthProvider::new_unpw(username_password))
+        ))
+    }
+    let udp_server = udp_server_builder.build(socket_addr).await?;
     plugin::register_plugins(&udp_server).await;
 
     let context = Context::new(udp_server, admin_token);
@@ -112,5 +117,8 @@ fn get_matches<'a>() -> ArgMatches<'a> {
             .short("i")
             .long("ignore-idle")
             .help("Don't send broadcast to idle clients"))
+        .arg(Arg::with_name("simple_auth")
+            .long("simple-auth")
+            .help("pass the auth via username and password, or else there's no authentication."))
         .get_matches()
 }

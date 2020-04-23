@@ -70,7 +70,7 @@ pub enum ForwarderFrame<'a> {
     Ipv4(Ipv4<'a>),
     Ping(Ping<'a>),
     Ipv4Frag(Ipv4Frag<'a>),
-    AuthMe,
+    AuthMe(AuthMe<'a>),
     Info,
 }
 
@@ -84,7 +84,7 @@ impl<'a> Parser<'a> for ForwarderFrame<'a> {
             forwarder_type::IPV4 => ForwarderFrame::Ipv4(Ipv4::parse(&rest)?),
             forwarder_type::PING => ForwarderFrame::Ping(Ping::parse(&rest)?),
             forwarder_type::IPV4_FRAG => ForwarderFrame::Ipv4Frag(Ipv4Frag::parse(&rest)?),
-            forwarder_type::AUTH_ME => ForwarderFrame::AuthMe,
+            forwarder_type::AUTH_ME => ForwarderFrame::AuthMe(AuthMe::parse(&rest)?),
             forwarder_type::INFO => ForwarderFrame::Info,
             _ => return Err(ParseError::NotParseable),
         };
@@ -179,6 +179,17 @@ impl<'a> Ipv4Frag<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct AuthMe<'a> {
+    payload: &'a [u8]
+}
+
+impl<'a> Parser<'a> for AuthMe<'a> {
+    const MIN_LENGTH: usize = 8;
+    fn do_parse(bytes: &'a [u8]) -> Result<AuthMe> {
+        Ok(AuthMe { payload: bytes })
+    }
+}
 
 #[derive(Debug)]
 pub struct Ping<'a> {
