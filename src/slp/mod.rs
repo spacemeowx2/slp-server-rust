@@ -6,6 +6,8 @@ mod stream;
 pub mod plugin;
 mod packet;
 mod packet_stream;
+mod auth;
+pub mod simple_auth_provider;
 
 pub use server::*;
 pub use frame::*;
@@ -15,6 +17,7 @@ pub(super) use stream::*;
 pub use packet_stream::*;
 pub use plugin::*;
 pub use packet::*;
+pub use auth::*;
 use std::net::SocketAddr;
 use tokio::time::Duration;
 
@@ -25,6 +28,8 @@ pub enum Event {
     Close(SocketAddr),
     SendLAN(SocketAddr, OutPacket),
 }
+
+pub type BoxedAuthProvider = Box<dyn AuthProvider>;
 
 pub fn log_err<T, E: std::fmt::Debug>(result: std::result::Result<T, E>, msg: &str) {
     if let Err(e) = result {
