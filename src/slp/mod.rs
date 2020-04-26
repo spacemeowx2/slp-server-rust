@@ -29,7 +29,7 @@ pub enum Event {
     SendLAN(SocketAddr, OutPacket),
 }
 
-pub type BoxedAuthProvider = Box<dyn AuthProvider>;
+pub type BoxedAuthProvider = Box<dyn AuthProvider + Send + Sync>;
 
 pub fn log_err<T, E: std::fmt::Debug>(result: std::result::Result<T, E>, msg: &str) {
     if let Err(e) = result {

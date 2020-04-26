@@ -9,6 +9,7 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Debug, PartialEq)]
 pub enum PeerState {
+    NeedAuth,
     Connected(Instant),
     Idle,
 }
@@ -57,7 +58,9 @@ impl Peer {
     pub fn on_packet(&mut self, data: InPacket) -> std::result::Result<(), Box<dyn std::error::Error>> {
         let frame = ForwarderFrame::parse(data.as_ref())?;
         let now = Instant::now();
+        // idle after timeout
         let state = match (frame, &self.state) {
+            (_, PeerState::NeedAuth) => None,
             (ForwarderFrame::Ipv4(..), _) | (ForwarderFrame::Ipv4Frag(..), _) => {
                 Some(PeerState::Connected(now))
             },

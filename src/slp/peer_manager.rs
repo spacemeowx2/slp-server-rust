@@ -1,7 +1,7 @@
 use tokio::sync::{RwLock, mpsc};
 use std::net::{SocketAddr, Ipv4Addr};
 use std::sync::Arc;
-use super::{Event, Peer, OutPacket, OutAddr, PacketSender, Packet, SendError};
+use super::{Event, PeerState, Peer, OutPacket, OutAddr, PacketSender, Packet, SendError, BoxedAuthProvider};
 use std::collections::HashMap;
 
 pub struct PeerManagerInfo {
@@ -21,6 +21,8 @@ struct InnerPeerManager {
     ignore_idle: bool,
 
     packet_tx: PacketSender,
+
+    auth_provider: Option<BoxedAuthProvider>,
 }
 
 impl InnerPeerManager {
@@ -30,6 +32,7 @@ impl InnerPeerManager {
             map: HashMap::new(),
             ignore_idle,
             packet_tx,
+            auth_provider: None,
         }
     }
 }
@@ -56,7 +59,14 @@ impl PeerManager {
         F: FnOnce(&mut Peer) -> ()
     {
         let cache = &mut self.inner.write().await.cache;
-        let peer = cache.entry(*addr).or_insert_with(|| Peer::new(*addr, event_send.clone()));
+        let need_auth = self.inner.read().await.auth_provider.is_some();
+        let peer = cache.entry(*addr).or_insert_with(|| {
+            let mut peer = Peer::new(*addr, event_send.clone());
+            if need_auth {
+                peer.state = PeerState::NeedAuth;
+            }
+            peer
+        });
         func(peer)
     }
     pub async fn send_broadcast(&self, packet: OutPacket) -> std::result::Result<usize, SendError> {
