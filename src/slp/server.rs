@@ -13,6 +13,8 @@ use crate::util::{FilterSameExt, create_socket};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
+use tower::{Service};
+use super::{InPacket, SendTo};
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
 
@@ -55,7 +57,8 @@ impl Inner {
     }
 }
 
-pub struct Server {
+pub struct Server<S> {
+    maker: S,
     config: UDPServerConfig,
     map: HashMap<SocketAddr, Peer>,
 }
@@ -81,16 +84,19 @@ impl Peer {
     }
 }
 
-impl Server {
-    pub async fn new(config: UDPServerConfig) -> Result<Self> {
+impl<S> Server<S>
+where
+    S: Service<InPacket, Response=SendTo> + Send + 'static,
+{
+    pub async fn new(maker: S, config: UDPServerConfig) -> Result<Self> {
         Ok(Self {
+            maker,
             config,
             map: HashMap::new(),
         })
     }
     pub async fn serve(&mut self, addr: SocketAddr) -> Result<()> {
         let mut socket = create_socket(&addr).await?;
-        use super::{InPacket, SendTo};
         let (out_packet_tx, mut out_packet_rx) = mpsc::channel::<SendTo>(10);
         let mut map: HashMap<SocketAddr, Peer> = HashMap::new();
         loop {

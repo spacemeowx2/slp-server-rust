@@ -3,7 +3,6 @@ extern crate lazy_static;
 
 mod graphql;
 mod slp;
-mod new_slp;
 mod graphql_ws_filter;
 mod util;
 mod plugin;
@@ -12,15 +11,16 @@ mod test;
 mod panic;
 
 use graphql::{schema, Context};
+use slp::{InPacket, UDPServerBuilder, UDPServerConfig, Server, simple_auth_provider::SimpleAuthProvider};
 use std::net::SocketAddr;
+use warp::Filter;
 use serde::Serialize;
 use std::convert::Infallible;
 use graphql_ws_filter::make_graphql_ws_filter;
-use warp::{Filter, filters::BoxedFilter, http::Method};
+use warp::filters::BoxedFilter;
 use env_logger::Env;
 use clap::{Arg, App, ArgMatches};
 use tower::{ServiceBuilder, Service, service_fn};
-use new_slp::{Server, InPacket, SendTo, service};
 
 #[derive(Serialize)]
 struct Info {
@@ -37,13 +37,19 @@ fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
     warp::any().map(move || ctx.clone()).boxed()
 }
 
+async fn service(packet: InPacket) -> Result<(), ()> {
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     env_logger::from_env(Env::default().default_filter_or("slp_server_rust=info")).init();
     panic::set_panic_hook();
 
-    let maker = ServiceBuilder::new().service(service_fn(service));
-    let mut server = Server::new(maker).await.unwrap();
+    let maker = ServiceBuilder::new()
+        .concurrency_limit(5)
+        .service(service_fn(service));
+    let mut server = Server::new(maker, UDPServerConfig::default()).await.unwrap();
     let bind_address = format!("{}:{}", "0.0.0.0", 12345);
     let socket_addr: SocketAddr = bind_address.parse().unwrap();
     tokio::spawn(async move {
@@ -63,33 +69,42 @@ async fn main() -> std::io::Result<()> {
     let bind_address = format!("{}:{}", "0.0.0.0", port);
     let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
 
-    // TODO add cors
-    // let context = Context::new(udp_server, admin_token);
+    let mut udp_server_builder = UDPServerBuilder::new()
+        .ignore_idle(ignore_idle);
+    if let Some(username_password) = simple_auth {
+        udp_server_builder = udp_server_builder.auth_provider(Some(
+            Box::new(SimpleAuthProvider::new_unpw(username_password))
+        ))
+    }
+    let udp_server = udp_server_builder.build(socket_addr).await?;
+    plugin::register_plugins(&udp_server).await;
 
-    // log::info!("Listening on {}", bind_address);
+    let context = Context::new(udp_server, admin_token);
 
-    // let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&context));
-    // let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&context));
+    log::info!("Listening on {}", bind_address);
+
+    let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&context));
+    let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&context));
 
 
-    // let log = warp::log("warp_server");
-    // let routes = (
-    //     warp::path("info")
-    //         .and(make_state(&context))
-    //         .and_then(server_info)
-    //     .or(warp::post()
-    //         .and(graphql_filter))
-    //     .or(
-    //         warp::get()
-    //         .and(graphql_ws_filter))
-    // )
-    // .or(warp::get()
-    //     .and(juniper_warp::playground_filter("/", Some("/"))))
-    //     .with(log);
+    let log = warp::log("warp_server");
+    let routes = (
+        warp::path("info")
+            .and(make_state(&context))
+            .and_then(server_info)
+        .or(warp::post()
+            .and(graphql_filter))
+        .or(
+            warp::get()
+            .and(graphql_ws_filter))
+    )
+    .or(warp::get()
+        .and(juniper_warp::playground_filter("/", Some("/"))))
+        .with(log);
 
-    // warp::serve(routes)
-    //     .run(*socket_addr)
-    //     .await;
+    warp::serve(routes)
+        .run(*socket_addr)
+        .await;
 
     Ok(())
 }
