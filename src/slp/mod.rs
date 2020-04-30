@@ -7,10 +7,8 @@ pub mod plugin;
 mod packet;
 mod packet_stream;
 mod auth;
-mod udp_listener;
 pub mod simple_auth_provider;
 
-pub use udp_listener::{UdpListener};
 pub use server::*;
 pub use frame::*;
 pub use peer::*;

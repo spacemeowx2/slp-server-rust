@@ -2,7 +2,7 @@ use tokio::io::Result;
 use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, mpsc, broadcast};
 use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
-use super::{packet_stream, PacketSender, PacketReceiver, BoxedAuthProvider, UdpListener};
+use super::{packet_stream, PacketSender, PacketReceiver, BoxedAuthProvider};
 use serde::Serialize;
 use juniper::GraphQLObject;
 use futures::stream::{StreamExt, BoxStream};
@@ -65,15 +65,6 @@ impl Server {
     }
     pub async fn serve(&mut self, addr: SocketAddr) -> Result<()> {
         let socket = create_socket(&addr).await?;
-        let mut listener = UdpListener::new(socket);
-
-        while let Some(mut stream) = listener.next().await {
-            tokio::spawn(async move {
-                while let Some(packet) = stream.next().await {
-                    stream.send(packet).await;
-                }
-            });
-        }
 
         Ok(())
     }
