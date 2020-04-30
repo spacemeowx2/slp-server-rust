@@ -1,6 +1,7 @@
 use tokio::io::Result;
 use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, mpsc, broadcast};
+use tokio::time::{Duration, Instant};
 use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
 use super::{packet_stream, PacketSender, PacketReceiver, BoxedAuthProvider};
 use serde::Serialize;
@@ -54,17 +55,53 @@ impl Inner {
 }
 
 pub struct Server {
-    config: UDPServerConfig
+    config: UDPServerConfig,
+    map: HashMap<SocketAddr, Peer>,
+}
+
+struct Peer {
+    addr: SocketAddr,
+    last_access: Instant,
+    timeout: Duration,
+}
+impl Peer {
+    fn access(&mut self) {
+        self.last_access = Instant::now();
+    }
+    fn expired(&self) -> bool {
+        self.last_access.elapsed() > self.timeout
+    }
+    fn new(addr: SocketAddr) -> Peer {
+        Peer {
+            addr,
+            last_access: Instant::now(),
+            timeout: Duration::from_secs(30),
+        }
+    }
 }
 
 impl Server {
     pub async fn new(config: UDPServerConfig) -> Result<Self> {
         Ok(Self {
-            config
+            config,
+            map: HashMap::new(),
         })
     }
     pub async fn serve(&mut self, addr: SocketAddr) -> Result<()> {
         let socket = create_socket(&addr).await?;
+        let (packet_tx, packet_rx) = packet_stream(socket);
+
+        packet_rx.for_each(
+            |in_packet| {
+                let mut map: HashMap<SocketAddr, Peer> = HashMap::new();
+                let mut tx = packet_tx.clone();
+                async move {
+                    let addr = *in_packet.addr();
+                    map.entry(addr).or_insert_with(|| Peer::new(addr)).access();
+
+                }
+            }
+        ).await;
 
         Ok(())
     }
