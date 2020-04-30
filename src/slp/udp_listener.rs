@@ -98,6 +98,6 @@ impl UdpStream {
 impl Stream for UdpStream {
     type Item = UdpItem;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.receiver).poll_recv(cx)
+        self.receiver.poll_recv(cx)
     }
 }

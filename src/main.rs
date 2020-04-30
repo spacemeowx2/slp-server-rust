@@ -11,7 +11,7 @@ mod test;
 mod panic;
 
 use graphql::{schema, Context};
-use slp::{UDPServerBuilder, simple_auth_provider::SimpleAuthProvider};
+use slp::{UDPServerBuilder, UDPServerConfig, Server, simple_auth_provider::SimpleAuthProvider};
 use std::net::SocketAddr;
 use serde::Serialize;
 use std::convert::Infallible;
@@ -39,6 +39,14 @@ fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
 async fn main() -> std::io::Result<()> {
     env_logger::from_env(Env::default().default_filter_or("slp_server_rust=info")).init();
     panic::set_panic_hook();
+
+    let mut server = Server::new(UDPServerConfig::default()).await.unwrap();
+    let bind_address = format!("{}:{}", "0.0.0.0", 12345);
+    let socket_addr: SocketAddr = bind_address.parse().unwrap();
+    tokio::spawn(async move {
+        server.serve(socket_addr).await.unwrap();
+    });
+
     let matches = get_matches();
 
     let port: u16 = matches.value_of("port").unwrap_or("11451").parse().expect("Can't parse port");

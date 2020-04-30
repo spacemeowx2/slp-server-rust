@@ -31,6 +31,16 @@ pub struct UDPServerConfig {
     auth_provider: Option<BoxedAuthProvider>,
 }
 
+impl Default for UDPServerConfig {
+    fn default() -> Self {
+        Self {
+            ignore_idle: false,
+            find_free_port: false,
+            auth_provider: None,
+        }
+    }
+}
+
 pub struct Inner {
     plugin: HashMap<String, BoxPlugin>,
 }
@@ -53,14 +63,15 @@ impl Server {
             config
         })
     }
-    pub async fn serve(addr: SocketAddr) -> Result<()> {
+    pub async fn serve(&mut self, addr: SocketAddr) -> Result<()> {
         let socket = create_socket(&addr).await?;
         let mut listener = UdpListener::new(socket);
 
         while let Some(mut stream) = listener.next().await {
             tokio::spawn(async move {
-                let packet = stream.next();
-                stream.send(packet).await;
+                while let Some(packet) = stream.next().await {
+                    stream.send(packet).await;
+                }
             });
         }
 
