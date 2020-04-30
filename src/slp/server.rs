@@ -2,6 +2,7 @@ use tokio::io::Result;
 use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, mpsc, broadcast};
 use tokio::time::{Duration, Instant};
+use tokio::select;
 use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
 use super::{packet_stream, PacketSender, PacketReceiver, BoxedAuthProvider};
 use serde::Serialize;
@@ -88,20 +89,28 @@ impl Server {
         })
     }
     pub async fn serve(&mut self, addr: SocketAddr) -> Result<()> {
-        let socket = create_socket(&addr).await?;
-        let (packet_tx, packet_rx) = packet_stream(socket);
+        let mut socket = create_socket(&addr).await?;
+        use super::{InPacket, SendTo};
+        let (out_packet_tx, mut out_packet_rx) = mpsc::channel::<SendTo>(10);
+        let mut map: HashMap<SocketAddr, Peer> = HashMap::new();
+        loop {
+            let mut buf = vec![0u8; 65536];
+            select! {
+                Ok((size, addr)) = socket.recv_from(&mut buf) => {
+                    buf.truncate(size);
+                    let in_packet = InPacket::new(addr, buf);
 
-        packet_rx.for_each(
-            |in_packet| {
-                let mut map: HashMap<SocketAddr, Peer> = HashMap::new();
-                let mut tx = packet_tx.clone();
-                async move {
-                    let addr = *in_packet.addr();
                     map.entry(addr).or_insert_with(|| Peer::new(addr)).access();
-
-                }
+                },
+                Some((packet, addrs)) = out_packet_rx.recv() => {
+                    for addr in addrs {
+                        // TODO: is it safe to ignore?
+                        let _ = socket.send_to(&packet, &addr).await;
+                    }
+                },
+                else => break,
             }
-        ).await;
+        }
 
         Ok(())
     }
