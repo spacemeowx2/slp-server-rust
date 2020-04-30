@@ -1,4 +1,5 @@
 use bytes::Buf;
+use std::net::Ipv4Addr;
 
 #[derive(Debug)]
 pub enum Error {
@@ -158,6 +159,10 @@ impl<T: AsRef<[u8]>> NodeInfo<T> {
             Ok(NodeInfo { buffer })
         }
     }
+    pub fn ip(&self) -> Ipv4Addr {
+        let mut buf = &self.buffer.as_ref()[0..4];
+        Ipv4Addr::from(buf.get_u32_le())
+    }
     pub fn node_id(&self) -> u8 {
         self.buffer.as_ref()[0xA]
     }
@@ -247,6 +252,7 @@ pub fn decompress(input: &[u8], output: &mut [u8]) -> Option<usize> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::net::Ipv4Addr;
 
     #[test]
     fn test_network_info() {
@@ -261,9 +267,14 @@ mod test {
         assert_eq!(info.node_count(), 2);
         let nodes = info.nodes();
         assert_eq!(nodes.len(), 2);
+        assert_eq!(&nodes[0].ip().to_string(), "10.13.58.122");
+
+        assert_eq!(nodes[0].ip(), Ipv4Addr::new(10, 13, 58, 122));
         assert_eq!(nodes[0].node_id(), 0);
         assert_eq!(nodes[0].is_connected(), true);
         assert_eq!(&nodes[0].player_name(), "Colyo");
+
+        assert_eq!(nodes[1].ip(), Ipv4Addr::new(10, 13, 7, 36));
         assert_eq!(nodes[1].node_id(), 1);
         assert_eq!(nodes[1].is_connected(), true);
         assert_eq!(&nodes[1].player_name(), "shana");

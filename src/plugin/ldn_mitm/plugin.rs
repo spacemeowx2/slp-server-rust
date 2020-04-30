@@ -14,6 +14,7 @@ use tokio::sync::Mutex;
 /// Node infomation
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
 pub struct NodeInfo {
+    ip: String,
     node_id: i32,
     is_connected: bool,
     player_name: String,
@@ -119,6 +120,7 @@ impl Plugin for LdnMitm {
                 let nodes: Vec<_> = info.nodes()
                     .into_iter()
                     .map(|node| NodeInfo {
+                        ip: node.ip().to_string(),
                         node_id: node.node_id() as i32,
                         is_connected: node.is_connected(),
                         player_name: node.player_name(),
