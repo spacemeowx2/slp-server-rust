@@ -11,7 +11,14 @@ use juniper::GraphQLObject;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Traffic infomation
+/// Node infomation
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
+pub struct NodeInfo {
+    node_id: i32,
+    is_connected: bool,
+    player_name: String,
+}
+/// Room infomation
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
 pub struct RoomInfo {
     /// the ip of room
@@ -20,6 +27,16 @@ pub struct RoomInfo {
     content_id: String,
     /// host player name
     host_player_name: String,
+    /// session id
+    session_id: String,
+    /// node count max
+    node_count_max: i32,
+    /// node count
+    node_count: i32,
+    /// nodes
+    nodes: Vec<NodeInfo>,
+    /// advertise data length
+    advertise_data_len: i32,
 }
 
 pub struct LdnMitm {
@@ -99,10 +116,23 @@ impl Plugin for LdnMitm {
                     Ok(info) => info,
                     _ => return,
                 };
+                let nodes: Vec<_> = info.nodes()
+                    .into_iter()
+                    .map(|node| NodeInfo {
+                        node_id: node.node_id() as i32,
+                        is_connected: node.is_connected(),
+                        player_name: node.player_name(),
+                    })
+                    .collect();
                 self.room_info.lock().await.insert(info.content_id(), RoomInfo {
                     ip: src_ip.to_string(),
                     content_id: hex::encode(info.content_id_bytes()),
                     host_player_name: info.host_player_name(),
+                    session_id: hex::encode(info.session_id()),
+                    node_count_max: info.node_count_max() as i32,
+                    node_count: info.node_count() as i32,
+                    nodes,
+                    advertise_data_len: info.advertise_data_len() as i32,
                 });
             },
             _ => (),
