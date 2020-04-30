@@ -1,4 +1,5 @@
 use bytes::Buf;
+use std::net::Ipv4Addr;
 
 #[derive(Debug)]
 pub enum Error {
@@ -92,7 +93,7 @@ pub struct NetworkInfo<T: AsRef<[u8]>> {
 }
 impl<T: AsRef<[u8]>> NetworkInfo<T> {
     pub fn new(buffer: T) -> Result<NetworkInfo<T>> {
-        if buffer.as_ref().len() != 0x480 {
+        if buffer.as_ref().len() < 0x480 {
             Err(Error::Invalid)
         } else {
             Ok(NetworkInfo { buffer })
@@ -108,8 +109,68 @@ impl<T: AsRef<[u8]>> NetworkInfo<T> {
         let mut data = &self.buffer.as_ref()[0..8];
         data.get_u64_le()
     }
+    pub fn session_id(&self) -> [u8; 16] {
+        let mut ret = [0u8; 16];
+        ret.copy_from_slice(&self.buffer.as_ref()[16..32]);
+        ret
+    }
     pub fn host_player_name(&self) -> String {
         let data = &self.buffer.as_ref()[0x74..0x74+32];
+        let data = data.iter().map(|i| *i).take_while(|i| *i != 0).collect();
+        String::from_utf8(data).unwrap_or("".to_string())
+    }
+    pub fn node_count_max(&self) -> u8 {
+        std::cmp::min(self.buffer.as_ref()[0x66], 8)
+    }
+    pub fn node_count(&self) -> u8 {
+        std::cmp::min(self.buffer.as_ref()[0x67], 8)
+    }
+    pub fn nodes<'a>(&'a self) -> Vec<NodeInfo<&'a [u8]>> {
+        let mut out = vec![];
+        for i in 0..self.node_count() {
+            let start = 0x68 + 0x40 * i as usize;
+            let buf: &[u8] = &self.buffer.as_ref()[start..start + 0x40];
+            out.push(NodeInfo::new(
+                buf
+            ).unwrap());
+        }
+        out
+    }
+    pub fn advertise_data_len(&self) -> u16 {
+        let mut data = &self.buffer.as_ref()[0x26A..0x26A + 2];
+        std::cmp::min(data.get_u16_le(), 384)
+    }
+    #[allow(dead_code)]
+    pub fn advertise_data<'a>(&'a self) -> &'a [u8] {
+        let len = self.advertise_data_len() as usize;
+        let start = 0x26C;
+        &self.buffer.as_ref()[start..start + len]
+    }
+}
+
+pub struct NodeInfo<T: AsRef<[u8]>> {
+    buffer: T,
+}
+impl<T: AsRef<[u8]>> NodeInfo<T> {
+    pub fn new(buffer: T) -> Result<NodeInfo<T>> {
+        if buffer.as_ref().len() < 0x40 {
+            Err(Error::Invalid)
+        } else {
+            Ok(NodeInfo { buffer })
+        }
+    }
+    pub fn ip(&self) -> Ipv4Addr {
+        let mut buf = &self.buffer.as_ref()[0..4];
+        Ipv4Addr::from(buf.get_u32_le())
+    }
+    pub fn node_id(&self) -> u8 {
+        self.buffer.as_ref()[0xA]
+    }
+    pub fn is_connected(&self) -> bool {
+        self.buffer.as_ref()[0xB] == 1
+    }
+    pub fn player_name(&self) -> String {
+        let data = &self.buffer.as_ref()[0xC..0xC+0x20];
         let data = data.iter().map(|i| *i).take_while(|i| *i != 0).collect();
         String::from_utf8(data).unwrap_or("".to_string())
     }
@@ -190,7 +251,37 @@ pub fn decompress(input: &[u8], output: &mut [u8]) -> Option<usize> {
 
 #[cfg(test)]
 mod test {
-    use super::decompress;
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    #[test]
+    fn test_network_info() {
+        let data = hex::decode("00e01600806a000100000100000000000000000000000000000000000000000002007a3a0d0a2031323334353637383132333435363738313233343536373831323334353637380006000302000000000000000000000000000000000000000001000000000008027a3a0d0a02007a3a0d0a0001436f6c796f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024070d0a020024070d0a01017368616e610000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000070012e4cb28f00000000041800009fe9344a000000000000000004000000000000000000000044010000000000000000000000000000000043006f006c0079006f000000610000000000000012005f010000000096000305000200000a000058000000000000000002ffffffffffffffffffffffffffffffffffffffffffffffffffffff04ffff00000000000000003143010b633bc6c76fb1f87300680061006e00610000001200000000561b0012001d0100000000000000000000000000000000c59d1c8100000000000000000000ffff00561b001200000000000000000000000000000000000000000000000000ffff000000001100000000002800120000000000000000000001700328001200ffff10a61c0c0300000000000000100000001000000030000000400000000100ffffa0a61c0c0100000000006505120000000000000001000000d00128001200ffff70f2ab42120000000000ab421200000068f2ab4212000000c80128001200ffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        let advertise_data = Vec::from(&data[0x26C..0x26C + 368]);
+        let info = NetworkInfo::new(data).unwrap();
+        assert_eq!(info.content_id(), 0x01006a800016e000);
+        assert_eq!(&info.content_id_bytes(), &hex::decode("01006a800016e000").unwrap()[..]);
+        assert_eq!(&info.session_id(), &hex::decode("00000000000000000000000000000000").unwrap()[..]);
+        assert_eq!(&info.host_player_name(), "Colyo");
+        assert_eq!(info.node_count_max(), 8);
+        assert_eq!(info.node_count(), 2);
+        let nodes = info.nodes();
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(&nodes[0].ip().to_string(), "10.13.58.122");
+
+        assert_eq!(nodes[0].ip(), Ipv4Addr::new(10, 13, 58, 122));
+        assert_eq!(nodes[0].node_id(), 0);
+        assert_eq!(nodes[0].is_connected(), true);
+        assert_eq!(&nodes[0].player_name(), "Colyo");
+
+        assert_eq!(nodes[1].ip(), Ipv4Addr::new(10, 13, 7, 36));
+        assert_eq!(nodes[1].node_id(), 1);
+        assert_eq!(nodes[1].is_connected(), true);
+        assert_eq!(&nodes[1].player_name(), "shana");
+
+        assert_eq!(info.advertise_data_len(), 368);
+        assert_eq!(info.advertise_data(), &advertise_data[..]);
+    }
 
     #[test]
     fn test_decompress() {
