@@ -38,6 +38,8 @@ pub struct RoomInfo {
     nodes: Vec<NodeInfo>,
     /// advertise data length
     advertise_data_len: i32,
+    /// advertise data in hex
+    advertise_data: String,
 }
 
 pub struct LdnMitm {
@@ -135,6 +137,7 @@ impl Plugin for LdnMitm {
                     node_count: info.node_count() as i32,
                     nodes,
                     advertise_data_len: info.advertise_data_len() as i32,
+                    advertise_data: hex::encode(info.advertise_data()),
                 });
             },
             _ => (),

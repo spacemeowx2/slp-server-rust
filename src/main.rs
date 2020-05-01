@@ -13,11 +13,10 @@ mod panic;
 use graphql::{schema, Context};
 use slp::UDPServerBuilder;
 use std::net::SocketAddr;
-use warp::Filter;
 use serde::Serialize;
 use std::convert::Infallible;
 use graphql_ws_filter::make_graphql_ws_filter;
-use warp::filters::BoxedFilter;
+use warp::{Filter, filters::BoxedFilter, http::Method};
 use env_logger::Env;
 use clap::{Arg, App, ArgMatches};
 
@@ -65,6 +64,10 @@ async fn main() -> std::io::Result<()> {
     let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&context));
     let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&context));
 
+    let cors = warp::cors()
+        .allow_headers(vec!["content-type", "x-apollo-tracing"])
+        .allow_methods(&[Method::POST])
+        .allow_any_origin();
 
     let log = warp::log("warp_server");
     let routes = (
@@ -79,7 +82,8 @@ async fn main() -> std::io::Result<()> {
     )
     .or(warp::get()
         .and(juniper_warp::playground_filter("/", Some("/"))))
-        .with(log);
+        .with(log)
+        .with(cors);
 
     warp::serve(routes)
         .run(*socket_addr)
