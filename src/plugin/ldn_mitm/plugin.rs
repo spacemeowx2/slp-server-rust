@@ -10,6 +10,7 @@ use serde::Serialize;
 use juniper::GraphQLObject;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use std::net::Ipv4Addr;
 
 /// Node infomation
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
@@ -38,11 +39,13 @@ pub struct RoomInfo {
     nodes: Vec<NodeInfo>,
     /// advertise data length
     advertise_data_len: i32,
+    /// advertise data in hex
+    advertise_data: String,
 }
 
 pub struct LdnMitm {
     frag_parser: FragParser,
-    room_info: Arc<Mutex<HashMap<u64, RoomInfo>>>,
+    room_info: Arc<Mutex<HashMap<Ipv4Addr, RoomInfo>>>,
 }
 
 impl LdnMitm {
@@ -68,7 +71,7 @@ impl LdnMitm {
 }
 
 impl LdnMitm {
-    pub fn room_info(&self) -> Arc<Mutex<HashMap<u64, RoomInfo>>> {
+    pub fn room_info(&self) -> Arc<Mutex<HashMap<Ipv4Addr, RoomInfo>>> {
         self.room_info.clone()
     }
 }
@@ -126,7 +129,7 @@ impl Plugin for LdnMitm {
                         player_name: node.player_name(),
                     })
                     .collect();
-                self.room_info.lock().await.insert(info.content_id(), RoomInfo {
+                self.room_info.lock().await.insert(src_ip, RoomInfo {
                     ip: src_ip.to_string(),
                     content_id: hex::encode(info.content_id_bytes()),
                     host_player_name: info.host_player_name(),
@@ -135,6 +138,7 @@ impl Plugin for LdnMitm {
                     node_count: info.node_count() as i32,
                     nodes,
                     advertise_data_len: info.advertise_data_len() as i32,
+                    advertise_data: hex::encode(info.advertise_data()),
                 });
             },
             _ => (),

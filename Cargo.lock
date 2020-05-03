@@ -1378,7 +1378,7 @@ checksum = "c111b5bd5695e56cffe5129854aa230b39c93a305372fdbb2668ca2394eea9f8"
 
 [[package]]
 name = "slp-server-rust"
-version = "2.0.0-rust.alpha.8"
+version = "2.0.0-rust.alpha.9"
 dependencies = [
  "async-trait",
  "backtrace",
