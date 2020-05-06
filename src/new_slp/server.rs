@@ -43,22 +43,22 @@ impl InPacket {
 
 pub struct Server<S> {
     maker: S,
-    map: HashMap<SocketAddr, Peer>,
+    map: HashMap<SocketAddr, Peer<S>>,
 }
 
-struct Peer {
+struct Peer<S> {
     addr: SocketAddr,
     last_access: Instant,
     timeout: Duration,
 }
-impl Peer {
+impl<S> Peer<S> {
     fn access(&mut self) {
         self.last_access = Instant::now();
     }
     fn expired(&self) -> bool {
         self.last_access.elapsed() > self.timeout
     }
-    fn new(addr: SocketAddr) -> Peer {
+    fn new(addr: SocketAddr, maker: &S) -> Peer<S> {
         Peer {
             addr,
             last_access: Instant::now(),
@@ -79,24 +79,27 @@ where
     }
     pub async fn serve(&mut self, addr: SocketAddr) -> Result<()> {
         let mut socket = create_socket(&addr).await?;
+        let (mut socket_rx, mut socket_tx) = socket.split();
         let (out_packet_tx, mut out_packet_rx) = mpsc::channel::<SendTo>(10);
-        let mut map: HashMap<SocketAddr, Peer> = HashMap::new();
+        let mut map: HashMap<SocketAddr, Peer<S>> = HashMap::new();
+
+        tokio::spawn(async move {
+            while let Some(SendTo { data, addrs }) = out_packet_rx.recv().await {
+                for addr in addrs {
+                    // TODO: is it safe to ignore?
+                    let _ = socket_tx.send_to(&data, &addr).await;
+                }
+            }
+        });
         loop {
             let mut buf = vec![0u8; 65536];
-            select! {
-                Ok((size, addr)) = socket.recv_from(&mut buf) => {
-                    buf.truncate(size);
-                    let in_packet = InPacket::new(addr, buf);
+            if let Ok((size, addr)) = socket_rx.recv_from(&mut buf).await {
+                buf.truncate(size);
+                let in_packet = InPacket::new(addr, buf);
 
-                    map.entry(addr).or_insert_with(|| Peer::new(addr)).access();
-                },
-                Some(SendTo { data, addrs }) = out_packet_rx.recv() => {
-                    for addr in addrs {
-                        // TODO: is it safe to ignore?
-                        let _ = socket.send_to(&data, &addr).await;
-                    }
-                },
-                else => break,
+                map.entry(addr).or_insert_with(|| Peer::new(addr, &self.maker)).access();
+            } else {
+                break
             }
         }
 
