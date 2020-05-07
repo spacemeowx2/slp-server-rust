@@ -28,7 +28,7 @@ pub fn packet_stream(socket: UdpSocket) -> (PacketSender, PacketReceiver) {
                 let in_packet = InPacket::new(addr, buf);
 
                 // TODO: ignore packet drop now. maybe a counter in the future
-                let _ = in_packet_tx.send_timeout(in_packet, ACTION_TIMEOUT).await;
+                let _ = in_packet_tx.try_send(in_packet);
             } else {
                 break
             }
