@@ -21,6 +21,7 @@ lru = "0.4.3"
 bytes = "0.5"
 hex = "0.4.2"
 backtrace = "0.3"
+structopt = "0.3"
 
 warp = "0.2"
 futures = "0.3.1"
@@ -33,7 +34,6 @@ juniper_codegen = { git = "https://github.com/spacemeowx2/juniper", rev = "95686
 juniper = { git = "https://github.com/spacemeowx2/juniper", rev = "95686b7ce530538d14bd42aafd47e07989dc9c2a" }
 juniper_warp = { git = "https://github.com/spacemeowx2/juniper", rev = "95686b7ce530538d14bd42aafd47e07989dc9c2a", features = ["subscriptions"] }
 juniper_subscriptions = { git = "https://github.com/spacemeowx2/juniper", rev = "95686b7ce530538d14bd42aafd47e07989dc9c2a" }
-clap = "2.33.0"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }

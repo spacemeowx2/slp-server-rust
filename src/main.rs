@@ -18,7 +18,34 @@ use std::convert::Infallible;
 use graphql_ws_filter::make_graphql_ws_filter;
 use warp::{Filter, filters::BoxedFilter, http::Method};
 use env_logger::Env;
-use clap::{Arg, App, ArgMatches};
+use structopt::StructOpt;
+
+macro_rules! version_string {
+    () => ( concat!(std::env!("CARGO_PKG_VERSION"), "-", std::env!("GIT_HASH")) )
+}
+
+#[derive(Debug, StructOpt)]
+#[structopt(
+    name = "slp-server-rust",
+    version = version_string!(),
+    author = "imspace <spacemeowx2@gmail.com>",
+    about = "switch-lan-play Server written in Rust",
+)]
+struct Opt {
+    /// Sets server listening port
+    #[structopt(
+        short,
+        long,
+        default_value = "11451",
+    )]
+    port: u16,
+    /// Token for admin query. If not preset, no one can query admin information.
+    #[structopt(long)]
+    admin_token: Option<String>,
+    /// Don't send broadcast to idle clients
+    #[structopt(short, long)]
+    ignore_idle: bool,
+}
 
 #[derive(Serialize)]
 struct Info {
@@ -39,25 +66,22 @@ fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
 async fn main() -> std::io::Result<()> {
     env_logger::from_env(Env::default().default_filter_or("slp_server_rust=info")).init();
     panic::set_panic_hook();
-    let matches = get_matches();
+    let opt = Opt::from_args();
 
-    let port: u16 = matches.value_of("port").unwrap_or("11451").parse().expect("Can't parse port");
-    let ignore_idle = matches.is_present("ignore_idle");
-    if ignore_idle {
+    if opt.ignore_idle {
         log::info!("--ignore-idle is not tested, bugs are expected");
     }
-    let admin_token = matches.value_of("admin_token").map(str::to_string);
 
-    let bind_address = format!("{}:{}", "0.0.0.0", port);
+    let bind_address = format!("{}:{}", "0.0.0.0", opt.port);
     let socket_addr: &SocketAddr = &bind_address.parse().unwrap();
 
     let udp_server = UDPServerBuilder::new()
-        .ignore_idle(ignore_idle)
+        .ignore_idle(opt.ignore_idle)
         .build(socket_addr)
         .await?;
     plugin::register_plugins(&udp_server).await;
 
-    let context = Context::new(udp_server, admin_token);
+    let context = Context::new(udp_server, opt.admin_token);
 
     log::info!("Listening on {}", bind_address);
 
@@ -90,27 +114,4 @@ async fn main() -> std::io::Result<()> {
         .await;
 
     Ok(())
-}
-
-fn get_matches<'a>() -> ArgMatches<'a> {
-    let version = format!("{}-{}", std::env!("CARGO_PKG_VERSION"), std::env!("GIT_HASH"));
-    App::new("slp-server-rust")
-        .version(&*version)
-        .author("imspace <spacemeowx2@gmail.com>")
-        .about("switch-lan-play Server written in Rust")
-        .arg(Arg::with_name("port")
-            .short("p")
-            .long("port")
-            .value_name("Port")
-            .help("Sets server listening port")
-            .takes_value(true))
-        .arg(Arg::with_name("admin_token")
-            .long("admin-token")
-            .value_name("Admin Token")
-            .help("Token for admin query. If not preset, no one can query admin information."))
-        .arg(Arg::with_name("ignore_idle")
-            .short("i")
-            .long("ignore-idle")
-            .help("Don't send broadcast to idle clients"))
-        .get_matches()
 }
