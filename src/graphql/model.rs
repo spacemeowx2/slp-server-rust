@@ -4,6 +4,7 @@ use crate::plugin::traffic::{TrafficInfo, TRAFFIC_TYPE};
 use crate::plugin::ldn_mitm::{LDN_MITM_TYPE, RoomInfo};
 use futures::stream::BoxStream;
 use std::sync::Arc;
+use async_graphql::*;
 
 pub struct Config {
     pub admin_token: Option<String>,
@@ -31,6 +32,7 @@ type TrafficInfoStream = BoxStream<'static, Result<TrafficInfo, FieldError>>;
 pub struct Query;
 
 #[juniper::graphql_object(Context = Context)]
+#[Object]
 impl Query {
     /// Infomation about this server
     async fn server_info(context: &Context) -> ServerInfo {

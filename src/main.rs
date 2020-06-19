@@ -66,6 +66,20 @@ fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
 async fn main() -> std::io::Result<()> {
     env_logger::from_env(Env::default().default_filter_or("slp_server_rust=info")).init();
     panic::set_panic_hook();
+
+    tokio::spawn(async {
+        tokio::signal::ctrl_c().await.expect("Failed to receive ctrl-c");
+        log::info!("Exiting by ctrl-c");
+        std::process::exit(0);
+    });
+    #[cfg(unix)]
+    tokio::spawn(async {
+        use tokio::signal::unix;
+        unix::signal(unix::SignalKind::terminate()).expect("Failed to receive SIGTERM").recv().await;
+        log::info!("Exiting by SIGTERM");
+        std::process::exit(0);
+    });
+
     let opt = Opt::from_args();
 
     if opt.ignore_idle {
