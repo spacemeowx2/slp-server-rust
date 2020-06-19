@@ -3,7 +3,6 @@ extern crate lazy_static;
 
 mod graphql;
 mod slp;
-mod graphql_ws_filter;
 mod util;
 mod plugin;
 #[cfg(test)]

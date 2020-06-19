@@ -1,4 +1,4 @@
-use juniper::{EmptyMutation, FieldError, RootNode, Value};
+use async_graphql::{EmptyMutation, FieldError, Value, FieldResult};
 use crate::slp::{UDPServer, ServerInfo};
 use crate::plugin::traffic::{TrafficInfo, TRAFFIC_TYPE};
 use crate::plugin::ldn_mitm::{LDN_MITM_TYPE, RoomInfo};
@@ -15,7 +15,6 @@ pub struct Context {
     pub udp_server: UDPServer,
     pub config: Arc<Config>,
 }
-impl juniper::Context for Context {}
 
 impl Context {
     pub fn new(udp_server: UDPServer, admin_token: Option<String>) -> Self {
@@ -28,18 +27,17 @@ impl Context {
     }
 }
 
-type TrafficInfoStream = BoxStream<'static, Result<TrafficInfo, FieldError>>;
+type TrafficInfoStream = BoxStream<'static, FieldResult<TrafficInfo>>;
 pub struct Query;
 
-#[juniper::graphql_object(Context = Context)]
 #[Object]
 impl Query {
     /// Infomation about this server
-    async fn server_info(context: &Context) -> ServerInfo {
+    async fn server_info(&self) -> ServerInfo {
         context.udp_server.server_info().await
     }
     /// Traffic infomation last second
-    async fn traffic_info(context: &Context, token: String) -> Result<TrafficInfo, FieldError> {
+    async fn traffic_info(&self, context: &Context, token: String) -> Result<TrafficInfo, FieldError> {
         if Some(token) == context.config.admin_token {
             let r = context.udp_server
                 .get_plugin(&TRAFFIC_TYPE, |traffic| {
@@ -55,7 +53,7 @@ impl Query {
         }
     }
     /// Current rooms
-    async fn room(context: &Context) -> Result<Vec<RoomInfo>, FieldError> {
+    async fn room(&self, context: &Context) -> Result<Vec<RoomInfo>, FieldError> {
         let r = context.udp_server
             .get_plugin(&LDN_MITM_TYPE, |ldn_mitm| {
                 ldn_mitm.map(|i| i.room_info())
@@ -68,14 +66,14 @@ impl Query {
     }
 }
 
-type ServerInfoStream = BoxStream<'static, Result<ServerInfo, FieldError>>;
+type ServerInfoStream = BoxStream<'static, FieldResult<ServerInfo>>;
 
 pub struct Subscription;
 
-#[juniper::graphql_subscription(Context = Context)]
+#[Object]
 impl Subscription {
     /// Infomation about this server
-    async fn server_info(context: &Context) -> ServerInfoStream {
+    async fn server_info(&self, context: &Context) -> ServerInfoStream {
         let context = context.clone();
 
         context.udp_server
@@ -85,7 +83,7 @@ impl Subscription {
             .boxed()
     }
     /// Traffic infomation last second
-    async fn traffic_info(context: &Context, token: String) -> Result<TrafficInfoStream, FieldError> {
+    async fn traffic_info(&self, context: &Context, token: String) -> Result<TrafficInfoStream, FieldError> {
         if Some(token) == context.config.admin_token {
             let r = context.udp_server
                 .get_plugin(&TRAFFIC_TYPE, |traffic| {
