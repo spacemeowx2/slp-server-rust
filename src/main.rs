@@ -127,7 +127,7 @@ async fn main() -> std::io::Result<()> {
     )
     .or(warp::get()
         .map(|| {
-            warp::reply::html(playground_source(GraphQLPlaygroundConfig::new("/")))
+            warp::reply::html(playground_source(GraphQLPlaygroundConfig::new("/").subscription_endpoint("/")))
         }))
     .with(log)
     .with(cors);
