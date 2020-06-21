@@ -9,12 +9,12 @@ mod plugin;
 mod test;
 mod panic;
 
-use graphql::{schema, Context};
+use async_graphql::{QueryBuilder, http::{GQLResponse, playground_source, GraphQLPlaygroundConfig}};
+use graphql::{schema, Ctx};
 use slp::UDPServerBuilder;
 use std::net::SocketAddr;
 use serde::Serialize;
 use std::convert::Infallible;
-use graphql_ws_filter::make_graphql_ws_filter;
 use warp::{Filter, filters::BoxedFilter, http::Method};
 use env_logger::Env;
 use structopt::StructOpt;
@@ -52,11 +52,11 @@ struct Info {
     version: String,
 }
 
-async fn server_info(context: Context) -> Result<impl warp::Reply, Infallible> {
+async fn server_info(context: Ctx) -> Result<impl warp::Reply, Infallible> {
     Ok(warp::reply::json(&context.udp_server.server_info().await))
 }
 
-fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
+fn make_state(context: &Ctx) -> BoxedFilter<(Ctx,)> {
     let ctx = context.clone();
     warp::any().map(move || ctx.clone()).boxed()
 }
@@ -94,12 +94,19 @@ async fn main() -> std::io::Result<()> {
         .await?;
     plugin::register_plugins(&udp_server).await;
 
-    let context = Context::new(udp_server, opt.admin_token);
+    let context = Ctx::new(udp_server, opt.admin_token);
 
     log::info!("Listening on {}", bind_address);
 
-    let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&context));
-    let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&context));
+    let graphql_filter = async_graphql_warp::graphql(schema(&context))
+        .and_then(|(schema, builder): (_, QueryBuilder)| async move {
+            // 执行查询
+            let resp = builder.execute(&schema).await;
+
+            // 返回结果
+            Ok::<_, Infallible>(warp::reply::json(&GQLResponse(resp)))
+        });
+    let graphql_ws_filter = async_graphql_warp::graphql_subscription(schema(&context));
 
     let cors = warp::cors()
         .allow_headers(vec!["content-type", "x-apollo-tracing"])
@@ -115,12 +122,15 @@ async fn main() -> std::io::Result<()> {
             .and(graphql_filter))
         .or(
             warp::get()
-            .and(graphql_ws_filter))
+            .and(graphql_ws_filter)
+        )
     )
     .or(warp::get()
-        .and(juniper_warp::playground_filter("/", Some("/"))))
-        .with(log)
-        .with(cors);
+        .map(|| {
+            warp::reply::html(playground_source(GraphQLPlaygroundConfig::new("/")))
+        }))
+    .with(log)
+    .with(cors);
 
     warp::serve(routes)
         .run(*socket_addr)

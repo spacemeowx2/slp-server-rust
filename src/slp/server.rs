@@ -4,7 +4,7 @@ use tokio::sync::{Mutex, mpsc, broadcast};
 use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
 use super::{packet_stream, PacketSender, PacketReceiver};
 use serde::Serialize;
-use juniper::GraphQLObject;
+use async_graphql::SimpleObject;
 use futures::stream::{StreamExt, BoxStream};
 use futures::prelude::*;
 use crate::util::{FilterSameExt, create_socket};
@@ -15,7 +15,8 @@ use std::collections::HashMap;
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
 
 /// Infomation about this server
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
+#[SimpleObject]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ServerInfo {
     /// The number of online clients
     online: i32,

@@ -2,14 +2,15 @@ use crate::slp::plugin::*;
 use crate::slp::spawn_stream;
 use crate::util::FilterSameExt;
 use serde::Serialize;
-use juniper::GraphQLObject;
+use async_graphql::SimpleObject;
 use std::sync::Arc;
 use tokio::sync::{Mutex, broadcast};
 use futures::{future, stream::BoxStream};
 use futures::prelude::*;
 
 /// Traffic infomation
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
+#[SimpleObject]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TrafficInfo {
     /// upload bytes last second
     upload: i32,
@@ -31,11 +32,11 @@ impl TrafficInfo {
             download_packet: 0,
         }
     }
-    fn upload(&mut self, size: i32) {
+    fn on_upload(&mut self, size: i32) {
         self.upload += size;
         self.upload_packet += 1;
     }
-    fn download(&mut self, size: i32) {
+    fn on_download(&mut self, size: i32) {
         self.download += size;
         self.download_packet += 1;
     }
@@ -54,10 +55,10 @@ impl Inner {
         inner.1.clone()
     }
     async fn in_packet(&mut self, packet: &InPacket) {
-        self.0.lock().await.0.download(packet.as_ref().len() as i32)
+        self.0.lock().await.0.on_download(packet.as_ref().len() as i32)
     }
     async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) {
-        self.0.lock().await.0.upload((packet.len() * addrs.len()) as i32)
+        self.0.lock().await.0.on_upload((packet.len() * addrs.len()) as i32)
     }
     async fn traffic_info(&self) -> TrafficInfo {
         self.0.lock().await.0.clone()

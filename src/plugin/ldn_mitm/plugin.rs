@@ -7,13 +7,14 @@ use futures::prelude::*;
 use smoltcp::wire::{Ipv4Packet, UdpPacket, IpProtocol};
 use std::collections::HashMap;
 use serde::Serialize;
-use juniper::GraphQLObject;
+use async_graphql::SimpleObject;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::net::Ipv4Addr;
 
 /// Node infomation
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
+#[SimpleObject]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct NodeInfo {
     ip: String,
     node_id: i32,
@@ -21,7 +22,8 @@ pub struct NodeInfo {
     player_name: String,
 }
 /// Room infomation
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, GraphQLObject)]
+#[SimpleObject]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct RoomInfo {
     /// the ip of room
     ip: String,
