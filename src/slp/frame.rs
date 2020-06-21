@@ -1,15 +1,15 @@
-use std::net::Ipv4Addr;
-use lru::LruCache;
+use super::packet::{OutAddr, Packet};
 use bytes::Buf;
-use super::packet::{Packet, OutAddr};
+use lru::LruCache;
+use std::net::Ipv4Addr;
 
 mod forwarder_type {
-    pub const KEEPALIVE: u8   = 0;
-    pub const IPV4: u8        = 1;
-    pub const PING: u8        = 2;
-    pub const IPV4_FRAG: u8    = 3;
-    pub const AUTH_ME: u8      = 4;
-    pub const INFO: u8        = 0x10;
+    pub const KEEPALIVE: u8 = 0;
+    pub const IPV4: u8 = 1;
+    pub const PING: u8 = 2;
+    pub const IPV4_FRAG: u8 = 3;
+    pub const AUTH_ME: u8 = 4;
+    pub const INFO: u8 = 0x10;
 }
 mod field {
     pub type Field = ::core::ops::Range<usize>;
@@ -92,10 +92,9 @@ impl<'a> Parser<'a> for ForwarderFrame<'a> {
     }
 }
 
-
 #[derive(Debug)]
 pub struct Ipv4<'a> {
-    payload: &'a [u8]
+    payload: &'a [u8],
 }
 
 impl<'a> Into<OutAddr> for Ipv4<'a> {
@@ -129,7 +128,7 @@ impl<'a> Ipv4<'a> {
 
 #[derive(Debug)]
 pub struct Ipv4Frag<'a> {
-    payload: &'a [u8]
+    payload: &'a [u8],
 }
 
 impl<'a> Into<OutAddr> for Ipv4Frag<'a> {
@@ -179,10 +178,9 @@ impl<'a> Ipv4Frag<'a> {
     }
 }
 
-
 #[derive(Debug)]
 pub struct Ping<'a> {
-    payload: &'a [u8]
+    payload: &'a [u8],
 }
 
 impl<'a> Parser<'a> for Ping<'a> {
@@ -230,10 +228,7 @@ impl FragItem {
 
 type FragParserKey = (Ipv4Addr, u16);
 pub struct FragParser {
-    cache: LruCache<
-        FragParserKey,
-        Vec<Option<FragItem>>,
-    >,
+    cache: LruCache<FragParserKey, Vec<Option<FragItem>>>,
 }
 
 impl FragParser {
@@ -260,7 +255,13 @@ impl FragParser {
             None => return None,
         };
         if list.iter().all(|i| i.is_some()) {
-            let list: Vec<_> = self.cache.pop(&key).unwrap().into_iter().map(Option::unwrap).collect();
+            let list: Vec<_> = self
+                .cache
+                .pop(&key)
+                .unwrap()
+                .into_iter()
+                .map(Option::unwrap)
+                .collect();
             let size: usize = list.iter().fold(0, |acc, item| acc + item.len as usize);
             let mut packet = vec![0u8; size];
             for i in list {
@@ -288,43 +289,47 @@ mod test {
         let frag1 = Ipv4Frag::parse(&[
             10, 13, 37, 100, // src_ip
             10, 13, 37, 101, // dst_ip
-            0, 1,            // id
-            0,               // part
-            2,               // total_part
-            0, 3,            // len
-            0, 3,            // pmtu
-            0, 1, 2          // data
-        ]).unwrap();
+            0, 1, // id
+            0, // part
+            2, // total_part
+            0, 3, // len
+            0, 3, // pmtu
+            0, 1, 2, // data
+        ])
+        .unwrap();
         let frag2 = Ipv4Frag::parse(&[
             10, 13, 37, 101, // src_ip
             10, 13, 37, 100, // dst_ip
-            0, 1,            // id
-            1,               // part
-            2,               // total_part
-            0, 2,            // len
-            0, 3,            // pmtu
-            3, 4             // data
-        ]).unwrap();
+            0, 1, // id
+            1, // part
+            2, // total_part
+            0, 2, // len
+            0, 3, // pmtu
+            3, 4, // data
+        ])
+        .unwrap();
         let frag3 = Ipv4Frag::parse(&[
             10, 13, 37, 101, // src_ip
             10, 13, 37, 100, // dst_ip
-            0, 1,            // id
-            0,               // part
-            2,               // total_part
-            0, 3,            // len
-            0, 3,            // pmtu
-            0, 1, 2          // data
-        ]).unwrap();
+            0, 1, // id
+            0, // part
+            2, // total_part
+            0, 3, // len
+            0, 3, // pmtu
+            0, 1, 2, // data
+        ])
+        .unwrap();
         let frag4 = Ipv4Frag::parse(&[
             10, 13, 37, 100, // src_ip
             10, 13, 37, 101, // dst_ip
-            0, 1,            // id
-            1,               // part
-            2,               // total_part
-            0, 2,            // len
-            0, 3,            // pmtu
-            3, 4             // data
-        ]).unwrap();
+            0, 1, // id
+            1, // part
+            2, // total_part
+            0, 2, // len
+            0, 3, // pmtu
+            3, 4, // data
+        ])
+        .unwrap();
         assert_eq!(parser.process(frag1), None);
         assert_eq!(parser.process(frag2), None);
         assert_eq!(parser.process(frag3).unwrap(), vec![0, 1, 2, 3, 4]);
@@ -337,33 +342,36 @@ mod test {
         let frag1 = Ipv4Frag::parse(&[
             10, 13, 37, 100, // src_ip
             10, 13, 37, 101, // dst_ip
-            0, 1,            // id
-            0,               // part
-            2,               // total_part
-            0, 3,            // len
-            0, 3,            // pmtu
-            0, 1, 2          // data
-        ]).unwrap();
+            0, 1, // id
+            0, // part
+            2, // total_part
+            0, 3, // len
+            0, 3, // pmtu
+            0, 1, 2, // data
+        ])
+        .unwrap();
         let frag2 = Ipv4Frag::parse(&[
             10, 13, 37, 100, // src_ip
             10, 13, 37, 101, // dst_ip
-            0, 1,            // id
-            1,               // part
-            2,               // total_part
-            0, 2,            // len
-            0, 4,            // * wrong pmtu
-            3, 4             // data
-        ]).unwrap();
+            0, 1, // id
+            1, // part
+            2, // total_part
+            0, 2, // len
+            0, 4, // * wrong pmtu
+            3, 4, // data
+        ])
+        .unwrap();
         let frag3 = Ipv4Frag::parse(&[
             10, 13, 37, 100, // src_ip
             10, 13, 37, 101, // dst_ip
-            0, 1,            // id
-            10,              // * wrong part
-            2,               // total_part
-            0, 2,            // len
-            0, 3,            // pmtu
-            3, 4             // data
-        ]).unwrap();
+            0, 1,  // id
+            10, // * wrong part
+            2,  // total_part
+            0, 2, // len
+            0, 3, // pmtu
+            3, 4, // data
+        ])
+        .unwrap();
         assert_eq!(parser.process(frag1), None);
         assert_eq!(parser.process(frag2), None);
         assert_eq!(parser.process(frag3), None);

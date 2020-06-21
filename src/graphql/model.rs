@@ -1,123 +1,112 @@
-use juniper::{EmptyMutation, FieldError, RootNode, Value};
-use crate::slp::{UDPServer, ServerInfo};
+use crate::plugin::ldn_mitm::{RoomInfo, LDN_MITM_TYPE};
 use crate::plugin::traffic::{TrafficInfo, TRAFFIC_TYPE};
-use crate::plugin::ldn_mitm::{LDN_MITM_TYPE, RoomInfo};
+use crate::slp::{ServerInfo, UDPServer};
+use async_graphql::*;
+use async_graphql::{Context, EmptyMutation, FieldResult};
 use futures::stream::BoxStream;
 use std::sync::Arc;
+
+#[derive(Debug)]
+struct StringError(&'static str);
+impl std::fmt::Display for StringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl std::error::Error for StringError {}
 
 pub struct Config {
     pub admin_token: Option<String>,
 }
 
 #[derive(Clone)]
-pub struct Context {
+pub struct Ctx {
     pub udp_server: UDPServer,
     pub config: Arc<Config>,
 }
-impl juniper::Context for Context {}
 
-impl Context {
+impl Ctx {
     pub fn new(udp_server: UDPServer, admin_token: Option<String>) -> Self {
         Self {
             udp_server,
-            config: Arc::new(Config {
-                admin_token
-            })
+            config: Arc::new(Config { admin_token }),
         }
     }
 }
 
-type TrafficInfoStream = BoxStream<'static, Result<TrafficInfo, FieldError>>;
 pub struct Query;
 
-#[juniper::graphql_object(Context = Context)]
+#[Object]
 impl Query {
     /// Infomation about this server
-    async fn server_info(context: &Context) -> ServerInfo {
-        context.udp_server.server_info().await
+    async fn server_info(&self, ctx: &Context<'_>) -> ServerInfo {
+        ctx.data::<Ctx>().udp_server.server_info().await
     }
     /// Traffic infomation last second
-    async fn traffic_info(context: &Context, token: String) -> Result<TrafficInfo, FieldError> {
-        if Some(token) == context.config.admin_token {
-            let r = context.udp_server
-                .get_plugin(&TRAFFIC_TYPE, |traffic| {
-                    traffic.map(Clone::clone)
-                })
-                .await;
-            match r {
-                Some(r) => Ok(r.traffic_info().await),
-                None => Err(FieldError::new("This plugin is not available", Value::null())),
-            }
+    async fn traffic_info(&self, ctx: &Context<'_>, token: String) -> FieldResult<TrafficInfo> {
+        let ctx = ctx.data::<Ctx>();
+        if Some(token) == ctx.config.admin_token {
+            let r = ctx
+                .udp_server
+                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(Clone::clone))
+                .await
+                .ok_or("This plugin is not available")?;
+            Ok(r.traffic_info().await)
         } else {
-            Err(FieldError::new("Permission denied", Value::null()))
+            Err("Permission denied".into())
         }
     }
     /// Current rooms
-    async fn room(context: &Context) -> Result<Vec<RoomInfo>, FieldError> {
-        let r = context.udp_server
-            .get_plugin(&LDN_MITM_TYPE, |ldn_mitm| {
-                ldn_mitm.map(|i| i.room_info())
-            })
-            .await;
-        match r {
-            Some(r) => Ok(r.lock().await.iter().map(|(_, v)| v.clone()).collect()),
-            None => Err(FieldError::new("This plugin is not available", Value::null())),
-        }
+    async fn room(&self, ctx: &Context<'_>) -> FieldResult<Vec<RoomInfo>> {
+        let ctx = ctx.data::<Ctx>();
+        let r = ctx
+            .udp_server
+            .get_plugin(&LDN_MITM_TYPE, |ldn_mitm| ldn_mitm.map(|i| i.room_info()))
+            .await
+            .ok_or("This plugin is not available")?;
+        let r = r.lock().await;
+        Ok(r.iter().map(|(_, v)| v.clone()).collect())
     }
 }
 
-type ServerInfoStream = BoxStream<'static, Result<ServerInfo, FieldError>>;
+type ServerInfoStream = BoxStream<'static, ServerInfo>;
+type TrafficInfoStream = BoxStream<'static, TrafficInfo>;
 
 pub struct Subscription;
 
-#[juniper::graphql_subscription(Context = Context)]
+#[Subscription]
 impl Subscription {
     /// Infomation about this server
-    async fn server_info(context: &Context) -> ServerInfoStream {
-        let context = context.clone();
+    async fn server_info(&self, context: &Context<'_>) -> ServerInfoStream {
+        let context = context.data::<Ctx>().clone();
 
-        context.udp_server
-            .server_info_stream()
-            .await
-            .map(|info| Ok(info))
-            .boxed()
+        context.udp_server.server_info_stream().await
     }
     /// Traffic infomation last second
-    async fn traffic_info(context: &Context, token: String) -> Result<TrafficInfoStream, FieldError> {
-        if Some(token) == context.config.admin_token {
-            let r = context.udp_server
-                .get_plugin(&TRAFFIC_TYPE, |traffic| {
-                    traffic.map(Clone::clone)
-                })
-                .await;
-            match r {
-                Some(r) => Ok(r
-                    .traffic_info_stream()
-                    .await
-                    .map(|info| Ok(info))
-                    .boxed()
-                ),
-                None => Err(FieldError::new("This plugin is not available", Value::null())),
-            }
-            // let context = context.clone();
+    async fn traffic_info(
+        &self,
+        context: &Context<'_>,
+        token: String,
+    ) -> FieldResult<TrafficInfoStream> {
+        let context = context.data::<Ctx>().clone();
 
-            // Ok(context.udp_server
-            //     .traffic_info_stream()
-            //     .await
-            //     .map(|info| Ok(info))
-            //     .boxed())
+        if Some(token) == context.config.admin_token {
+            let r = context
+                .udp_server
+                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(Clone::clone))
+                .await
+                .ok_or("This plugin is not available")?;
+            Ok(r.traffic_info_stream().await)
         } else {
-            Err(FieldError::new("Permission denied", Value::null()))
+            Err("Permission denied".into())
         }
     }
 }
 
-type Schema = RootNode<'static, Query, EmptyMutation<Context>, Subscription>;
+type RootSchema = Schema<Query, EmptyMutation, Subscription>;
 
-pub fn schema() -> Schema {
-    Schema::new(
-        Query,
-        EmptyMutation::<Context>::new(),
-        Subscription,
-    )
+pub fn schema(ctx: &Ctx) -> RootSchema {
+    Schema::build(Query, EmptyMutation, Subscription)
+        .data(ctx.clone())
+        .finish()
 }

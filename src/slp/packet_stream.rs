@@ -1,6 +1,6 @@
-use super::{ACTION_TIMEOUT, InPacket, Packet, SocketAddr};
-use tokio::{net::UdpSocket, sync::mpsc};
+use super::{InPacket, Packet, SocketAddr, ACTION_TIMEOUT};
 use tokio::select;
+use tokio::{net::UdpSocket, sync::mpsc};
 
 pub type SendTo = (Packet, Vec<SocketAddr>);
 pub type PacketSender = mpsc::Sender<SendTo>;
@@ -33,5 +33,5 @@ pub fn packet_stream(mut socket: UdpSocket) -> (PacketSender, PacketReceiver) {
         }
         log::error!("Recv task down");
     });
-    return (out_packet_tx, in_packet_rx)
+    return (out_packet_tx, in_packet_rx);
 }

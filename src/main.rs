@@ -2,26 +2,30 @@
 extern crate lazy_static;
 
 mod graphql;
-mod slp;
-mod graphql_ws_filter;
-mod util;
+mod panic;
 mod plugin;
+mod slp;
 #[cfg(test)]
 mod test;
-mod panic;
+mod util;
 
-use graphql::{schema, Context};
-use slp::UDPServerBuilder;
-use std::net::SocketAddr;
-use serde::Serialize;
-use std::convert::Infallible;
-use graphql_ws_filter::make_graphql_ws_filter;
-use warp::{Filter, filters::BoxedFilter, http::Method};
+use async_graphql::{
+    http::{playground_source, GQLResponse, GraphQLPlaygroundConfig},
+    QueryBuilder,
+};
 use env_logger::Env;
+use graphql::{schema, Ctx};
+use serde::Serialize;
+use slp::UDPServerBuilder;
+use std::convert::Infallible;
+use std::net::SocketAddr;
 use structopt::StructOpt;
+use warp::{filters::BoxedFilter, http::Method, Filter};
 
 macro_rules! version_string {
-    () => ( concat!(std::env!("CARGO_PKG_VERSION"), "-", std::env!("GIT_HASH")) )
+    () => {
+        concat!(std::env!("CARGO_PKG_VERSION"), "-", std::env!("GIT_HASH"))
+    };
 }
 
 #[derive(Debug, StructOpt)]
@@ -33,11 +37,7 @@ macro_rules! version_string {
 )]
 struct Opt {
     /// Sets server listening port
-    #[structopt(
-        short,
-        long,
-        default_value = "11451",
-    )]
+    #[structopt(short, long, default_value = "11451")]
     port: u16,
     /// Token for admin query. If not preset, no one can query admin information.
     #[structopt(long)]
@@ -53,11 +53,11 @@ struct Info {
     version: String,
 }
 
-async fn server_info(context: Context) -> Result<impl warp::Reply, Infallible> {
+async fn server_info(context: Ctx) -> Result<impl warp::Reply, Infallible> {
     Ok(warp::reply::json(&context.udp_server.server_info().await))
 }
 
-fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
+fn make_state(context: &Ctx) -> BoxedFilter<(Ctx,)> {
     let ctx = context.clone();
     warp::any().map(move || ctx.clone()).boxed()
 }
@@ -66,6 +66,25 @@ fn make_state(context: &Context) -> BoxedFilter<(Context,)> {
 async fn main() -> std::io::Result<()> {
     env_logger::from_env(Env::default().default_filter_or("slp_server_rust=info")).init();
     panic::set_panic_hook();
+
+    tokio::spawn(async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to receive ctrl-c");
+        log::info!("Exiting by ctrl-c");
+        std::process::exit(0);
+    });
+    #[cfg(unix)]
+    tokio::spawn(async {
+        use tokio::signal::unix;
+        unix::signal(unix::SignalKind::terminate())
+            .expect("Failed to receive SIGTERM")
+            .recv()
+            .await;
+        log::info!("Exiting by SIGTERM");
+        std::process::exit(0);
+    });
+
     let opt = Opt::from_args();
 
     if opt.ignore_idle {
@@ -81,12 +100,20 @@ async fn main() -> std::io::Result<()> {
         .await?;
     plugin::register_plugins(&udp_server).await;
 
-    let context = Context::new(udp_server, opt.admin_token);
+    let context = Ctx::new(udp_server, opt.admin_token);
 
     log::info!("Listening on {}", bind_address);
 
-    let graphql_filter = juniper_warp::make_graphql_filter(schema(), make_state(&context));
-    let graphql_ws_filter = make_graphql_ws_filter(schema(), make_state(&context));
+    let graphql_filter = async_graphql_warp::graphql(schema(&context)).and_then(
+        |(schema, builder): (_, QueryBuilder)| async move {
+            // 执行查询
+            let resp = builder.execute(&schema).await;
+
+            // 返回结果
+            Ok::<_, Infallible>(warp::reply::json(&GQLResponse(resp)))
+        },
+    );
+    let graphql_ws_filter = async_graphql_warp::graphql_subscription(schema(&context));
 
     let cors = warp::cors()
         .allow_headers(vec!["content-type", "x-apollo-tracing"])
@@ -94,24 +121,20 @@ async fn main() -> std::io::Result<()> {
         .allow_any_origin();
 
     let log = warp::log("warp_server");
-    let routes = (
-        warp::path("info")
-            .and(make_state(&context))
-            .and_then(server_info)
-        .or(warp::post()
-            .and(graphql_filter))
-        .or(
-            warp::get()
-            .and(graphql_ws_filter))
-    )
-    .or(warp::get()
-        .and(juniper_warp::playground_filter("/", Some("/"))))
-        .with(log)
-        .with(cors);
+    let routes = (warp::path("info")
+        .and(make_state(&context))
+        .and_then(server_info)
+        .or(warp::post().and(graphql_filter))
+        .or(warp::get().and(graphql_ws_filter)))
+    .or(warp::get().map(|| {
+        warp::reply::html(playground_source(
+            GraphQLPlaygroundConfig::new("/").subscription_endpoint("/"),
+        ))
+    }))
+    .with(log)
+    .with(cors);
 
-    warp::serve(routes)
-        .run(*socket_addr)
-        .await;
+    warp::serve(routes).run(*socket_addr).await;
 
     Ok(())
 }

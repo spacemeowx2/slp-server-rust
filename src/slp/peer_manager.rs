@@ -1,8 +1,8 @@
-use tokio::sync::{RwLock, mpsc};
-use std::net::{SocketAddr, Ipv4Addr};
-use std::sync::Arc;
-use super::{Event, Peer, OutPacket, OutAddr, PacketSender, Packet, SendError};
+use super::{Event, OutAddr, OutPacket, Packet, PacketSender, Peer, SendError};
 use std::collections::HashMap;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::sync::Arc;
+use tokio::sync::{mpsc, RwLock};
 
 pub struct PeerManagerInfo {
     /// The number of online clients
@@ -24,7 +24,7 @@ struct InnerPeerManager {
 }
 
 impl InnerPeerManager {
-    fn new(packet_tx: PacketSender,ignore_idle: bool,) -> Self {
+    fn new(packet_tx: PacketSender, ignore_idle: bool) -> Self {
         Self {
             cache: HashMap::new(),
             map: HashMap::new(),
@@ -42,9 +42,7 @@ pub struct PeerManager {
 impl PeerManager {
     pub fn new(packet_tx: PacketSender, ignore_idle: bool) -> Self {
         Self {
-            inner: Arc::new(RwLock::new(
-                InnerPeerManager::new(packet_tx, ignore_idle)
-            )),
+            inner: Arc::new(RwLock::new(InnerPeerManager::new(packet_tx, ignore_idle))),
         }
     }
     pub async fn remove(&self, addr: &SocketAddr) {
@@ -53,10 +51,12 @@ impl PeerManager {
     }
     pub async fn peer_mut<F>(&self, addr: &SocketAddr, event_send: &mpsc::Sender<Event>, func: F)
     where
-        F: FnOnce(&mut Peer) -> ()
+        F: FnOnce(&mut Peer) -> (),
     {
         let cache = &mut self.inner.write().await.cache;
-        let peer = cache.entry(*addr).or_insert_with(|| Peer::new(*addr, event_send.clone()));
+        let peer = cache
+            .entry(*addr)
+            .or_insert_with(|| Peer::new(*addr, event_send.clone()));
         func(peer)
     }
     pub async fn send_broadcast(&self, packet: OutPacket) -> std::result::Result<usize, SendError> {
@@ -64,7 +64,9 @@ impl PeerManager {
         let len = packet.len();
         let inner = &mut self.inner.write().await;
         let mut packet_tx = inner.packet_tx.clone();
-        let addrs = inner.cache.iter()
+        let addrs = inner
+            .cache
+            .iter()
             .map(|(addr, _)| *addr)
             .collect::<Vec<_>>();
         let size: usize = addrs.len() * len;
@@ -77,9 +79,11 @@ impl PeerManager {
         if let Some(addr) = inner.map.get(&out_addr.dst_ip()) {
             vec![*addr]
         } else {
-            let addrs = inner.cache.iter()
+            let addrs = inner
+                .cache
+                .iter()
                 .filter(|(_, i)| !inner.ignore_idle || i.state.is_connected())
-                .filter(|(addr, _) | &&from != addr)
+                .filter(|(addr, _)| &&from != addr)
                 .map(|(addr, _)| *addr)
                 .collect::<Vec<_>>();
             addrs
@@ -89,8 +93,7 @@ impl PeerManager {
         &self,
         packet: Packet,
         addrs: Vec<SocketAddr>,
-    ) -> std::result::Result<usize, SendError>
-    {
+    ) -> std::result::Result<usize, SendError> {
         let len = packet.len();
         let size: usize = addrs.len() * len;
         let inner = &mut self.inner.write().await;
@@ -102,9 +105,6 @@ impl PeerManager {
         let inner = &self.inner.read().await;
         let online = inner.cache.len() as i32;
         let idle = inner.cache.values().filter(|i| i.state.is_idle()).count() as i32;
-        PeerManagerInfo {
-            online,
-            idle,
-        }
+        PeerManagerInfo { online, idle }
     }
 }
