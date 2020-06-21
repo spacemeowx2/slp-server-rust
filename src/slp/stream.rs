@@ -1,7 +1,7 @@
+use crate::util::FilterSameExt;
+use futures::prelude::*;
 use tokio::sync::broadcast;
 use tokio::time::Duration;
-use futures::prelude::*;
-use crate::util::FilterSameExt;
 
 pub fn spawn_stream<T, F, Fut, Item>(obj: &T, func: F) -> broadcast::Sender<Item>
 where
@@ -14,17 +14,18 @@ where
     let obj = obj.clone();
     let sender = tx.clone();
 
-    tokio::spawn(tokio::time::interval(Duration::from_secs(1))
-        .then(move |_| {
-            let obj = obj.clone();
-            func(obj)
-        })
-        .filter_same()
-        .for_each(move |item| {
-            // ignore the only error: no active receivers
-            let _ = tx.send(item);
-            future::ready(())
-        })
+    tokio::spawn(
+        tokio::time::interval(Duration::from_secs(1))
+            .then(move |_| {
+                let obj = obj.clone();
+                func(obj)
+            })
+            .filter_same()
+            .for_each(move |item| {
+                // ignore the only error: no active receivers
+                let _ = tx.send(item);
+                future::ready(())
+            }),
     );
 
     sender

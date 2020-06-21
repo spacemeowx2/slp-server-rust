@@ -2,7 +2,7 @@
 pub mod ldn_mitm;
 pub mod traffic;
 
-use crate::slp::{UDPServer, BoxPluginType};
+use crate::slp::{BoxPluginType, UDPServer};
 use lazy_static::lazy_static;
 
 lazy_static! {

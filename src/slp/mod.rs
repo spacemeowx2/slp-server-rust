@@ -1,21 +1,21 @@
-mod server;
 mod frame;
-mod peer;
-mod peer_manager;
-mod stream;
-pub mod plugin;
 mod packet;
 mod packet_stream;
+mod peer;
+mod peer_manager;
+pub mod plugin;
+mod server;
+mod stream;
 
-pub use server::*;
 pub use frame::*;
+pub use packet::*;
+pub use packet_stream::*;
 pub use peer::*;
 pub use peer_manager::*;
-pub(super) use stream::*;
-pub use packet_stream::*;
 pub use plugin::*;
-pub use packet::*;
+pub use server::*;
 use std::net::SocketAddr;
+pub(super) use stream::*;
 use tokio::time::Duration;
 
 pub const ACTION_TIMEOUT: Duration = Duration::from_millis(100);

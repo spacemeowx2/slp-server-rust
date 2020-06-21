@@ -1,15 +1,14 @@
+mod lan_protocol;
 mod plugin;
 mod util;
-mod lan_protocol;
 
 pub use plugin::*;
 
-
 mod constants {
-    use std::net::Ipv4Addr;
+    use super::util::*;
     use crate::slp::plugin::*;
     use crate::slp::OutAddr;
-    use super::util::*;
+    use std::net::Ipv4Addr;
 
     pub const LDN_MITM_PORT: u16 = 11452;
     pub const SERVER_ADDR: Ipv4Addr = Ipv4Addr::new(10, 13, 37, 0);

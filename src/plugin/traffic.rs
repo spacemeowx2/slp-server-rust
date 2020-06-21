@@ -1,12 +1,12 @@
 use crate::slp::plugin::*;
 use crate::slp::spawn_stream;
 use crate::util::FilterSameExt;
-use serde::Serialize;
 use async_graphql::SimpleObject;
-use std::sync::Arc;
-use tokio::sync::{Mutex, broadcast};
-use futures::{future, stream::BoxStream};
 use futures::prelude::*;
+use futures::{future, stream::BoxStream};
+use serde::Serialize;
+use std::sync::Arc;
+use tokio::sync::{broadcast, Mutex};
 
 /// Traffic infomation
 #[SimpleObject]
@@ -47,7 +47,10 @@ struct Inner(Arc<Mutex<(TrafficInfo, TrafficInfo)>>);
 
 impl Inner {
     fn new() -> Inner {
-        Inner(Arc::new(Mutex::new((TrafficInfo::new(), TrafficInfo::new()))))
+        Inner(Arc::new(Mutex::new((
+            TrafficInfo::new(),
+            TrafficInfo::new(),
+        ))))
     }
     async fn clear_traffic(&mut self) -> TrafficInfo {
         let mut inner = self.0.lock().await;
@@ -55,10 +58,18 @@ impl Inner {
         inner.1.clone()
     }
     async fn in_packet(&mut self, packet: &InPacket) {
-        self.0.lock().await.0.on_download(packet.as_ref().len() as i32)
+        self.0
+            .lock()
+            .await
+            .0
+            .on_download(packet.as_ref().len() as i32)
     }
     async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) {
-        self.0.lock().await.0.on_upload((packet.len() * addrs.len()) as i32)
+        self.0
+            .lock()
+            .await
+            .0
+            .on_upload((packet.len() * addrs.len()) as i32)
     }
     async fn traffic_info(&self) -> TrafficInfo {
         self.0.lock().await.0.clone()
@@ -72,9 +83,11 @@ impl Traffic {
     fn new() -> Self {
         let inner = Inner::new();
 
-        let traffic_sender = spawn_stream(&inner, |mut inner| async move {
-            inner.clear_traffic().await
-        });
+        let traffic_sender =
+            spawn_stream(
+                &inner,
+                |mut inner| async move { inner.clear_traffic().await },
+            );
 
         Self(inner, traffic_sender)
     }
@@ -82,7 +95,8 @@ impl Traffic {
         self.0.traffic_info().await
     }
     pub async fn traffic_info_stream(&self) -> TrafficInfoStream {
-        let stream = self.1
+        let stream = self
+            .1
             .subscribe()
             .take_while(|info| future::ready(info.is_ok()))
             .map(|info| info.unwrap());

@@ -1,7 +1,7 @@
-pub use super::{PeerManager, InPacket, OutPacket, Packet};
+pub use super::{InPacket, OutPacket, Packet, PeerManager};
 pub use async_trait::async_trait;
+use downcast_rs::{impl_downcast, Downcast};
 pub use std::net::SocketAddr;
-use downcast_rs::{Downcast, impl_downcast};
 
 pub struct Context<'a> {
     pub peer_manager: &'a PeerManager,
@@ -9,9 +9,7 @@ pub struct Context<'a> {
 
 impl<'a> Context<'a> {
     pub fn new(peer_manager: &'a PeerManager) -> Self {
-        Self {
-            peer_manager,
-        }
+        Self { peer_manager }
     }
 }
 

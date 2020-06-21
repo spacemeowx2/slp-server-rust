@@ -1,7 +1,7 @@
 use bencher::{black_box, Bencher};
-use slp_server_rust::test::{make_server, client_connect, make_packet, recv_packet};
-use tokio::runtime::{self, Runtime};
+use slp_server_rust::test::{client_connect, make_packet, make_server, recv_packet};
 use smoltcp::wire::*;
+use tokio::runtime::{self, Runtime};
 
 fn relay_n(b: &mut Bencher, count: usize, clinet_count: usize) {
     let mut rt = rt();
@@ -13,7 +13,7 @@ fn relay_n(b: &mut Bencher, count: usize, clinet_count: usize) {
             for i in 0..clinet_count {
                 let packet = make_packet(
                     Ipv4Address::new(10, 13, 37, 100 + i as u8),
-                    Ipv4Address::new(10, 13, 255, 255)
+                    Ipv4Address::new(10, 13, 255, 255),
                 );
                 let mut socket = client_connect(addr).await;
                 socket.send(&packet).await.unwrap();
@@ -24,7 +24,7 @@ fn relay_n(b: &mut Bencher, count: usize, clinet_count: usize) {
 
             let packet1 = make_packet(
                 Ipv4Address::new(10, 13, 37, 100),
-                Ipv4Address::new(10, 13, 255, 255)
+                Ipv4Address::new(10, 13, 255, 255),
             );
 
             for _ in 0..count {
@@ -64,11 +64,7 @@ fn rt() -> Runtime {
         .unwrap()
 }
 
-bencher::benchmark_group!(
-    relay,
-    relay_1000,
-    relay_2000
-);
+bencher::benchmark_group!(relay, relay_1000, relay_2000);
 
 bencher::benchmark_group!(
     broadcast,

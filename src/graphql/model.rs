@@ -1,10 +1,10 @@
-use async_graphql::{EmptyMutation, FieldResult, Context};
-use crate::slp::{UDPServer, ServerInfo};
+use crate::plugin::ldn_mitm::{RoomInfo, LDN_MITM_TYPE};
 use crate::plugin::traffic::{TrafficInfo, TRAFFIC_TYPE};
-use crate::plugin::ldn_mitm::{LDN_MITM_TYPE, RoomInfo};
+use crate::slp::{ServerInfo, UDPServer};
+use async_graphql::*;
+use async_graphql::{Context, EmptyMutation, FieldResult};
 use futures::stream::BoxStream;
 use std::sync::Arc;
-use async_graphql::*;
 
 #[derive(Debug)]
 struct StringError(&'static str);
@@ -29,9 +29,7 @@ impl Ctx {
     pub fn new(udp_server: UDPServer, admin_token: Option<String>) -> Self {
         Self {
             udp_server,
-            config: Arc::new(Config {
-                admin_token
-            })
+            config: Arc::new(Config { admin_token }),
         }
     }
 }
@@ -48,10 +46,9 @@ impl Query {
     async fn traffic_info(&self, ctx: &Context<'_>, token: String) -> FieldResult<TrafficInfo> {
         let ctx = ctx.data::<Ctx>();
         if Some(token) == ctx.config.admin_token {
-            let r = ctx.udp_server
-                .get_plugin(&TRAFFIC_TYPE, |traffic| {
-                    traffic.map(Clone::clone)
-                })
+            let r = ctx
+                .udp_server
+                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(Clone::clone))
                 .await
                 .ok_or("This plugin is not available")?;
             Ok(r.traffic_info().await)
@@ -62,10 +59,9 @@ impl Query {
     /// Current rooms
     async fn room(&self, ctx: &Context<'_>) -> FieldResult<Vec<RoomInfo>> {
         let ctx = ctx.data::<Ctx>();
-        let r = ctx.udp_server
-            .get_plugin(&LDN_MITM_TYPE, |ldn_mitm| {
-                ldn_mitm.map(|i| i.room_info())
-            })
+        let r = ctx
+            .udp_server
+            .get_plugin(&LDN_MITM_TYPE, |ldn_mitm| ldn_mitm.map(|i| i.room_info()))
             .await
             .ok_or("This plugin is not available")?;
         let r = r.lock().await;
@@ -84,24 +80,23 @@ impl Subscription {
     async fn server_info(&self, context: &Context<'_>) -> ServerInfoStream {
         let context = context.data::<Ctx>().clone();
 
-        context.udp_server
-            .server_info_stream()
-            .await
+        context.udp_server.server_info_stream().await
     }
     /// Traffic infomation last second
-    async fn traffic_info(&self, context: &Context<'_>, token: String) -> FieldResult<TrafficInfoStream> {
+    async fn traffic_info(
+        &self,
+        context: &Context<'_>,
+        token: String,
+    ) -> FieldResult<TrafficInfoStream> {
         let context = context.data::<Ctx>().clone();
 
         if Some(token) == context.config.admin_token {
-            let r = context.udp_server
-                .get_plugin(&TRAFFIC_TYPE, |traffic| {
-                    traffic.map(Clone::clone)
-                })
+            let r = context
+                .udp_server
+                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(Clone::clone))
                 .await
                 .ok_or("This plugin is not available")?;
-            Ok(r
-                .traffic_info_stream()
-                .await)
+            Ok(r.traffic_info_stream().await)
         } else {
             Err("Permission denied".into())
         }
@@ -111,11 +106,7 @@ impl Subscription {
 type RootSchema = Schema<Query, EmptyMutation, Subscription>;
 
 pub fn schema(ctx: &Ctx) -> RootSchema {
-    Schema::build(
-        Query,
-        EmptyMutation,
-        Subscription,
-    )
-    .data(ctx.clone())
-    .finish()
+    Schema::build(Query, EmptyMutation, Subscription)
+        .data(ctx.clone())
+        .finish()
 }

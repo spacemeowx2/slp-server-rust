@@ -13,17 +13,17 @@ mod field {
     pub type Field = ::core::ops::Range<usize>;
     pub type FieldFrom = ::core::ops::RangeFrom<usize>;
 
-    pub const MAGIC:        Field = 0..4;
-    pub const TYPE:         usize = 4;
-    pub const COMPRESSED:   usize = 5;
-    pub const LEN:          Field = 6..8;
-    pub const ORI_LEN:      Field = 8..10;
-    pub const REVERSED:     Field = 10..12;
-    pub const PAYLOAD:      FieldFrom = 12..;
+    pub const MAGIC: Field = 0..4;
+    pub const TYPE: usize = 4;
+    pub const COMPRESSED: usize = 5;
+    pub const LEN: Field = 6..8;
+    pub const ORI_LEN: Field = 8..10;
+    pub const REVERSED: Field = 10..12;
+    pub const PAYLOAD: FieldFrom = 12..;
 }
 
 pub struct LdnHeader<T: AsRef<[u8]>> {
-    buffer: T
+    buffer: T,
 }
 
 impl<T: AsRef<[u8]>> std::fmt::Debug for LdnHeader<T> {
@@ -115,7 +115,7 @@ impl<T: AsRef<[u8]>> NetworkInfo<T> {
         ret
     }
     pub fn host_player_name(&self) -> String {
-        let data = &self.buffer.as_ref()[0x74..0x74+32];
+        let data = &self.buffer.as_ref()[0x74..0x74 + 32];
         let data = data.iter().map(|i| *i).take_while(|i| *i != 0).collect();
         String::from_utf8(data).unwrap_or("".to_string())
     }
@@ -130,9 +130,7 @@ impl<T: AsRef<[u8]>> NetworkInfo<T> {
         for i in 0..self.node_count() {
             let start = 0x68 + 0x40 * i as usize;
             let buf: &[u8] = &self.buffer.as_ref()[start..start + 0x40];
-            out.push(NodeInfo::new(
-                buf
-            ).unwrap());
+            out.push(NodeInfo::new(buf).unwrap());
         }
         out
     }
@@ -170,7 +168,7 @@ impl<T: AsRef<[u8]>> NodeInfo<T> {
         self.buffer.as_ref()[0xB] == 1
     }
     pub fn player_name(&self) -> String {
-        let data = &self.buffer.as_ref()[0xC..0xC+0x20];
+        let data = &self.buffer.as_ref()[0xC..0xC + 0x20];
         let data = data.iter().map(|i| *i).take_while(|i| *i != 0).collect();
         String::from_utf8(data).unwrap_or("".to_string())
     }
@@ -183,7 +181,6 @@ impl<T: AsRef<[u8]>> std::fmt::Debug for NetworkInfo<T> {
             .finish()
     }
 }
-
 
 #[derive(Debug)]
 pub struct LdnPacket {
@@ -224,14 +221,14 @@ pub fn decompress(input: &[u8], output: &mut [u8]) -> Option<usize> {
     let mut pos = 0;
     for i in input.iter() {
         if pos >= output.len() {
-            return None
+            return None;
         }
         if lead_zero {
             let size = *i as usize;
             if pos + size > output.len() {
-                return None
+                return None;
             }
-            output[pos..pos + size].swap_with_slice(&mut vec![0u8 ; size]);
+            output[pos..pos + size].swap_with_slice(&mut vec![0u8; size]);
             pos += size;
             lead_zero = false;
         } else {
@@ -260,8 +257,14 @@ mod test {
         let advertise_data = Vec::from(&data[0x26C..0x26C + 368]);
         let info = NetworkInfo::new(data).unwrap();
         assert_eq!(info.content_id(), 0x01006a800016e000);
-        assert_eq!(&info.content_id_bytes(), &hex::decode("01006a800016e000").unwrap()[..]);
-        assert_eq!(&info.session_id(), &hex::decode("00000000000000000000000000000000").unwrap()[..]);
+        assert_eq!(
+            &info.content_id_bytes(),
+            &hex::decode("01006a800016e000").unwrap()[..]
+        );
+        assert_eq!(
+            &info.session_id(),
+            &hex::decode("00000000000000000000000000000000").unwrap()[..]
+        );
         assert_eq!(&info.host_player_name(), "Colyo");
         assert_eq!(info.node_count_max(), 8);
         assert_eq!(info.node_count(), 2);

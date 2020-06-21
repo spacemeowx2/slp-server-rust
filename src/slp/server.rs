@@ -1,16 +1,19 @@
-use tokio::io::Result;
-use tokio::net::UdpSocket;
-use tokio::sync::{Mutex, mpsc, broadcast};
-use super::{Event, log_warn, ForwarderFrame, Parser, PeerManager, PeerManagerInfo, Packet, spawn_stream, BoxPlugin, BoxPluginType, Context};
-use super::{packet_stream, PacketSender, PacketReceiver};
-use serde::Serialize;
+use super::{
+    log_warn, spawn_stream, BoxPlugin, BoxPluginType, Context, Event, ForwarderFrame, Packet,
+    Parser, PeerManager, PeerManagerInfo,
+};
+use super::{packet_stream, PacketReceiver, PacketSender};
+use crate::util::{create_socket, FilterSameExt};
 use async_graphql::SimpleObject;
-use futures::stream::{StreamExt, BoxStream};
 use futures::prelude::*;
-use crate::util::{FilterSameExt, create_socket};
+use futures::stream::{BoxStream, StreamExt};
+use serde::Serialize;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::collections::HashMap;
+use tokio::io::Result;
+use tokio::net::UdpSocket;
+use tokio::sync::{broadcast, mpsc, Mutex};
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
 
@@ -56,10 +59,13 @@ async fn find_port(mut addr: SocketAddr) -> Result<(SocketAddr, UdpSocket)> {
         addr.set_port(port);
         match create_socket(&addr).await {
             Ok(l) => return Ok((addr, l)),
-            _ => continue
+            _ => continue,
         }
     }
-    Err(std::io::Error::new(std::io::ErrorKind::Other, "Can't find avaliable port"))
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Can't find avaliable port",
+    ))
 }
 
 impl UDPServer {
@@ -95,25 +101,22 @@ impl UDPServer {
     ) {
         let inner = inner.clone();
         let peer_manager = peer_manager.clone();
-        tokio::spawn(async move {
-            Self::event_task(&inner, event_recv, &peer_manager).await
-        });
+        tokio::spawn(async move { Self::event_task(&inner, event_recv, &peer_manager).await });
     }
     async fn event_task(
         inner: &Arc<Mutex<Inner>>,
         event_recv: mpsc::Receiver<Event>,
         peer_manager: &PeerManager,
     ) {
-        event_recv.for_each_concurrent(
-            4,
-            |event| {
+        event_recv
+            .for_each_concurrent(4, |event| {
                 let inner = inner.clone();
                 let peer_manager = peer_manager.clone();
                 async move {
                     match event {
                         Event::Close(addr) => {
                             peer_manager.remove(&addr).await;
-                        },
+                        }
                         Event::SendLAN(from, out_packet) => {
                             let (packet, out_addr) = out_packet.split();
                             let addrs = peer_manager.get_dest_sockaddr(from, out_addr).await;
@@ -121,17 +124,14 @@ impl UDPServer {
                                 p.out_packet(&packet, &addrs).await;
                             }
                             log_warn(
-                                peer_manager.send_lan(
-                                    packet,
-                                    addrs,
-                                ).await,
-                                "failed to send lan packet"
+                                peer_manager.send_lan(packet, addrs).await,
+                                "failed to send lan packet",
                             );
-                        },
+                        }
                     }
                 }
-            }
-        ).await
+            })
+            .await
     }
     fn spawn_recv(
         inner: &Arc<Mutex<Inner>>,
@@ -155,9 +155,8 @@ impl UDPServer {
         peer_manager: &PeerManager,
         event_send: &mpsc::Sender<Event>,
     ) {
-        packet_rx.for_each_concurrent(
-            10,
-            |in_packet| {
+        packet_rx
+            .for_each_concurrent(10, |in_packet| {
                 let inner = inner.clone();
                 let peer_manager = peer_manager.clone();
                 let mut tx = packet_tx.clone();
@@ -173,15 +172,17 @@ impl UDPServer {
                     };
                     if let ForwarderFrame::Ping(ping) = &frame {
                         Self::send_client(&mut tx, vec![addr], ping.build()).await;
-                        return
+                        return;
                     }
-                    peer_manager.peer_mut(&addr, &event_send, move |peer| {
-                        // ignore packet when channel is full
-                        let _ = peer.on_packet(in_packet);
-                    }).await;
+                    peer_manager
+                        .peer_mut(&addr, &event_send, move |peer| {
+                            // ignore packet when channel is full
+                            let _ = peer.on_packet(in_packet);
+                        })
+                        .await;
                 }
-            }
-        ).await
+            })
+            .await
     }
     async fn send_client(socket: &mut PacketSender, addr: Vec<SocketAddr>, packet: Packet) {
         log_warn(
@@ -193,7 +194,8 @@ impl UDPServer {
         server_info_from_peer(&self.peer_manager).await
     }
     pub async fn server_info_stream(&self) -> ServerInfoStream {
-        let stream = self.info_sender
+        let stream = self
+            .info_sender
             .subscribe()
             .take_while(|info| future::ready(info.is_ok()))
             .map(|info| info.unwrap());
@@ -210,7 +212,7 @@ impl UDPServer {
     pub async fn get_plugin<'a, T, F, R>(&'a self, typ: &BoxPluginType<T>, func: F) -> R
     where
         T: 'static,
-        F: Fn(Option<&T>) -> R
+        F: Fn(Option<&T>) -> R,
     {
         let inner = self.inner.lock().await;
         let plugin = inner.plugin.get(&typ.name()).unwrap();
@@ -255,12 +257,11 @@ impl UDPServerBuilder {
     }
 }
 
-
 #[cfg(test)]
 mod test {
-    use crate::plugin::{self, traffic::TRAFFIC_TYPE};
     use super::UDPServerBuilder;
-    use crate::test::{make_server, make_packet, recv_packet, client_connect};
+    use crate::plugin::{self, traffic::TRAFFIC_TYPE};
+    use crate::test::{client_connect, make_packet, make_server, recv_packet};
     use smoltcp::wire::*;
 
     const ADDR: &'static str = "127.0.0.1:12121";
@@ -273,9 +274,9 @@ mod test {
             .await
             .unwrap();
         plugin::register_plugins(&udp_server).await;
-        let traffic = udp_server.get_plugin(&TRAFFIC_TYPE, |traffic| {
-            traffic.map(Clone::clone)
-        }).await;
+        let traffic = udp_server
+            .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(Clone::clone))
+            .await;
         assert!(traffic.is_some(), true);
     }
 
@@ -288,11 +289,11 @@ mod test {
 
         let packet1 = make_packet(
             Ipv4Address::new(10, 13, 37, 100),
-            Ipv4Address::new(10, 13, 37, 101)
+            Ipv4Address::new(10, 13, 37, 101),
         );
         let packet2 = make_packet(
             Ipv4Address::new(10, 13, 37, 101),
-            Ipv4Address::new(10, 13, 37, 100)
+            Ipv4Address::new(10, 13, 37, 100),
         );
         socket1.send(&packet1).await.unwrap();
         socket2.send(&packet2).await.unwrap();

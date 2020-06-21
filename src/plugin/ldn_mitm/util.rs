@@ -1,6 +1,6 @@
-use smoltcp::wire::{UdpPacket, UdpRepr, Ipv4Packet, Ipv4Repr, IpProtocol};
-use smoltcp::phy::ChecksumCapabilities;
 use super::constants::*;
+use smoltcp::phy::ChecksumCapabilities;
+use smoltcp::wire::{IpProtocol, Ipv4Packet, Ipv4Repr, UdpPacket, UdpRepr};
 
 pub fn make_udp(payload: &[u8]) -> Vec<u8> {
     let checksum = ChecksumCapabilities::default();
@@ -18,7 +18,12 @@ pub fn make_udp(payload: &[u8]) -> Vec<u8> {
     };
     let mut bytes = vec![0xa5; ip_repr.buffer_len() + udp_repr.buffer_len()];
     let mut udp_packet = UdpPacket::new_unchecked(&mut bytes[ip_repr.buffer_len()..]);
-    udp_repr.emit(&mut udp_packet, &SERVER_ADDR.into(), &BROADCAST_ADDR.into(), &checksum);
+    udp_repr.emit(
+        &mut udp_packet,
+        &SERVER_ADDR.into(),
+        &BROADCAST_ADDR.into(),
+        &checksum,
+    );
     let mut ip_packet = Ipv4Packet::new_unchecked(&mut bytes);
     ip_repr.emit(&mut ip_packet, &checksum);
 
@@ -32,13 +37,15 @@ mod test {
     #[test]
     fn test_make_udp() {
         let bytes = make_udp(&[0, 1, 2, 3]);
-        assert_eq!(&bytes, &[
-            0x45, 0x0, 0x0, 0x20, 0x0, 0x0, 0x40, 0x0, 0x40, 0x11, 0x1, 0xb4,
-            10, 13, 37, 0,          // src
-            10, 13, 255, 255,       // dst
-            0x2c, 0xbc, 0x2c, 0xbc, // src port dst port
-            0x0, 0xc, 0x6b, 0x40,
-            0x0, 0x1, 0x2, 0x3
-        ]);
+        assert_eq!(
+            &bytes,
+            &[
+                0x45, 0x0, 0x0, 0x20, 0x0, 0x0, 0x40, 0x0, 0x40, 0x11, 0x1, 0xb4, 10, 13, 37,
+                0, // src
+                10, 13, 255, 255, // dst
+                0x2c, 0xbc, 0x2c, 0xbc, // src port dst port
+                0x0, 0xc, 0x6b, 0x40, 0x0, 0x1, 0x2, 0x3
+            ]
+        );
     }
 }

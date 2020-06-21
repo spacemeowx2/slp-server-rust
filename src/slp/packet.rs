@@ -1,4 +1,4 @@
-pub use std::net::{SocketAddr, Ipv4Addr};
+pub use std::net::{Ipv4Addr, SocketAddr};
 
 #[derive(Debug, Clone)]
 pub struct OutAddr {
@@ -7,14 +7,8 @@ pub struct OutAddr {
 }
 
 impl OutAddr {
-    pub fn new(
-        src_ip: Ipv4Addr,
-        dst_ip: Ipv4Addr,
-    ) -> OutAddr {
-        OutAddr {
-            src_ip,
-            dst_ip,
-        }
+    pub fn new(src_ip: Ipv4Addr, dst_ip: Ipv4Addr) -> OutAddr {
+        OutAddr { src_ip, dst_ip }
     }
     pub fn src_ip(&self) -> &Ipv4Addr {
         &self.src_ip
@@ -23,7 +17,6 @@ impl OutAddr {
         &self.dst_ip
     }
 }
-
 
 pub type Packet = Vec<u8>;
 

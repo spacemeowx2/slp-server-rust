@@ -1,16 +1,16 @@
-use crate::slp::plugin::*;
-use crate::slp::{FragParser, ForwarderFrame, Parser};
 use super::constants::*;
 use super::lan_protocol::{LdnPacket, NetworkInfo};
-use tokio::time::{interval, Duration};
-use futures::prelude::*;
-use smoltcp::wire::{Ipv4Packet, UdpPacket, IpProtocol};
-use std::collections::HashMap;
-use serde::Serialize;
+use crate::slp::plugin::*;
+use crate::slp::{ForwarderFrame, FragParser, Parser};
 use async_graphql::SimpleObject;
+use futures::prelude::*;
+use serde::Serialize;
+use smoltcp::wire::{IpProtocol, Ipv4Packet, UdpPacket};
+use std::collections::HashMap;
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use std::net::Ipv4Addr;
+use tokio::time::{interval, Duration};
 
 /// Node infomation
 #[SimpleObject]
@@ -54,17 +54,14 @@ impl LdnMitm {
     fn new(peer_manager: PeerManager) -> LdnMitm {
         let room_info = Arc::new(Mutex::new(HashMap::new()));
         let ri = room_info.clone();
-        tokio::spawn(
-            interval(Duration::from_secs(5))
-            .for_each(move |_| {
-                let pm = peer_manager.clone();
-                let ri = ri.clone();
-                async move {
-                    ri.lock().await.clear();
-                    let _ = pm.send_broadcast(PACKET.clone()).await;
-                }
-            })
-        );
+        tokio::spawn(interval(Duration::from_secs(5)).for_each(move |_| {
+            let pm = peer_manager.clone();
+            let ri = ri.clone();
+            async move {
+                ri.lock().await.clear();
+                let _ = pm.send_broadcast(PACKET.clone()).await;
+            }
+        }));
         LdnMitm {
             frag_parser: FragParser::new(),
             room_info,
@@ -87,12 +84,12 @@ impl Plugin for LdnMitm {
                 let dst_ip = ipv4.dst_ip();
                 let p = Vec::from(ipv4.data());
                 Some((src_ip, dst_ip, p))
-            },
+            }
             Ok(ForwarderFrame::Ipv4Frag(frag)) => {
                 let src_ip = frag.src_ip();
                 let dst_ip = frag.dst_ip();
                 self.frag_parser.process(frag).map(|p| (src_ip, dst_ip, p))
-            },
+            }
             _ => None,
         };
         match _packet {
@@ -102,7 +99,7 @@ impl Plugin for LdnMitm {
                     _ => return,
                 };
                 if packet.protocol() != IpProtocol::Udp {
-                    return
+                    return;
                 }
                 let payload = packet.payload_mut();
                 let mut packet = match UdpPacket::new_checked(payload) {
@@ -116,13 +113,14 @@ impl Plugin for LdnMitm {
                     _ => return,
                 };
                 if packet.typ() != 1 {
-                    return
+                    return;
                 }
                 let info = match NetworkInfo::new(packet.payload()) {
                     Ok(info) => info,
                     _ => return,
                 };
-                let nodes: Vec<_> = info.nodes()
+                let nodes: Vec<_> = info
+                    .nodes()
                     .into_iter()
                     .map(|node| NodeInfo {
                         ip: node.ip().to_string(),
@@ -131,18 +129,21 @@ impl Plugin for LdnMitm {
                         player_name: node.player_name(),
                     })
                     .collect();
-                self.room_info.lock().await.insert(src_ip, RoomInfo {
-                    ip: src_ip.to_string(),
-                    content_id: hex::encode(info.content_id_bytes()),
-                    host_player_name: info.host_player_name(),
-                    session_id: hex::encode(info.session_id()),
-                    node_count_max: info.node_count_max() as i32,
-                    node_count: info.node_count() as i32,
-                    nodes,
-                    advertise_data_len: info.advertise_data_len() as i32,
-                    advertise_data: hex::encode(info.advertise_data()),
-                });
-            },
+                self.room_info.lock().await.insert(
+                    src_ip,
+                    RoomInfo {
+                        ip: src_ip.to_string(),
+                        content_id: hex::encode(info.content_id_bytes()),
+                        host_player_name: info.host_player_name(),
+                        session_id: hex::encode(info.session_id()),
+                        node_count_max: info.node_count_max() as i32,
+                        node_count: info.node_count() as i32,
+                        nodes,
+                        advertise_data_len: info.advertise_data_len() as i32,
+                        advertise_data: hex::encode(info.advertise_data()),
+                    },
+                );
+            }
             _ => (),
         }
     }
