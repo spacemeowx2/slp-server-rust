@@ -1,5 +1,5 @@
 use futures::future;
-use futures_util::{stream::BoxStream, StreamExt};
+use futures::{stream::BoxStream, StreamExt};
 
 impl<T: ?Sized> FilterSameExt for T
 where
