@@ -29,14 +29,18 @@ tokio = { version = "0.2", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-async-graphql = "1.15.15"
-async-graphql-warp = "1.3.0"
+async-graphql = "1.16.0"
+async-graphql-warp = "1.14.20"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
 
 [dev-dependencies]
 bencher = "0.1.5"
+
+[patch.crates-io]
+async-graphql = { git = "https://github.com/spacemeowx2/async-graphql.git", rev = "52599e2b0040ae9a8953c9c071eb059c41200283" }
+async-graphql-warp = { git = "https://github.com/spacemeowx2/async-graphql.git", rev = "52599e2b0040ae9a8953c9c071eb059c41200283" }
 
 [[bench]]
 name = "udp_server"
