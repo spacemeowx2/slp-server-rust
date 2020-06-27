@@ -7,7 +7,7 @@ pub enum AuthError {
 }
 
 pub type AuthResult<T> = Result<T, AuthError>;
-
+pub type BoxedAuthProvider = Box<dyn AuthProvider>;
 #[async_trait]
 pub trait AuthProvider {
     /// Returns true if the user existed and password was correct

@@ -1,6 +1,7 @@
 use super::{
     log_warn, spawn_stream, BoxPlugin, BoxPluginType, Context, Event, ForwarderFrame, Packet,
     Parser, PeerManager, PeerManagerInfo,
+    BoxedAuthProvider,
 };
 use super::{packet_stream, PacketReceiver, PacketSender};
 use crate::util::{create_socket, FilterSameExt};

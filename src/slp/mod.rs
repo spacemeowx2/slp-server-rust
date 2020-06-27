@@ -6,7 +6,9 @@ mod peer_manager;
 pub mod plugin;
 mod server;
 mod stream;
+mod auth;
 
+pub use auth::*;
 pub use frame::*;
 pub use packet::*;
 pub use packet_stream::*;
