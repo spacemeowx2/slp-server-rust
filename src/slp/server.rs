@@ -32,6 +32,7 @@ pub struct ServerInfo {
 pub struct UDPServerConfig {
     ignore_idle: bool,
     find_free_port: bool,
+    auth_provider: Option<BoxedAuthProvider>,
 }
 
 pub struct Inner {
@@ -240,6 +241,7 @@ impl UDPServerBuilder {
         UDPServerBuilder(UDPServerConfig {
             ignore_idle: false,
             find_free_port: false,
+            auth_provider: None,
         })
     }
     #[allow(dead_code)]
@@ -249,6 +251,10 @@ impl UDPServerBuilder {
     }
     pub fn ignore_idle(mut self, v: bool) -> Self {
         self.0.ignore_idle = v;
+        self
+    }
+    pub fn auth_provider(mut self, v: Option<BoxedAuthProvider>) -> Self {
+        self.0.auth_provider = v;
         self
     }
     pub async fn build(self, addr: &SocketAddr) -> Result<UDPServer> {

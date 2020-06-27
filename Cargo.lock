@@ -1704,6 +1704,7 @@ dependencies = [
  "lru",
  "serde",
  "serde_json",
+ "sha-1",
  "smoltcp",
  "structopt",
  "tokio",

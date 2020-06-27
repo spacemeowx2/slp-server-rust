@@ -54,14 +54,17 @@ impl LdnMitm {
     fn new(peer_manager: PeerManager) -> LdnMitm {
         let room_info = Arc::new(Mutex::new(HashMap::new()));
         let ri = room_info.clone();
-        tokio::spawn(interval(Duration::from_secs(5)).for_each(move |_| {
-            let pm = peer_manager.clone();
-            let ri = ri.clone();
-            async move {
-                ri.lock().await.clear();
-                let _ = pm.send_broadcast(PACKET.clone()).await;
-            }
-        }));
+        tokio::spawn(
+            interval(Duration::from_secs(5))
+            .for_each(move |_| {
+                let pm = peer_manager.clone();
+                let ri = ri.clone();
+                async move {
+                    ri.lock().await.clear();
+                    let _ = pm.send_broadcast(PACKET.clone()).await;
+                }
+            })
+        );
         LdnMitm {
             frag_parser: FragParser::new(),
             room_info,
