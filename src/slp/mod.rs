@@ -5,6 +5,7 @@ mod peer;
 mod peer_manager;
 pub mod plugin;
 mod server;
+mod udpserver;
 mod stream;
 mod auth;
 
