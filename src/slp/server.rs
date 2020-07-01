@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::Result;
-use tokio::net::UdpSocket;
 use tokio::sync::{broadcast, mpsc, Mutex};
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
@@ -32,7 +31,6 @@ pub struct ServerInfo {
 
 pub struct UDPServerConfig {
     ignore_idle: bool,
-    find_free_port: bool,
     auth_provider: Option<BoxedAuthProvider>,
 }
 
@@ -56,28 +54,13 @@ pub struct UDPServer {
     local_addr: SocketAddr,
 }
 
-async fn find_port(mut addr: SocketAddr) -> Result<(SocketAddr, UdpSocket)> {
-    for port in addr.port()..65535 {
-        addr.set_port(port);
-        match create_socket(&addr).await {
-            Ok(l) => return Ok((addr, l)),
-            _ => continue,
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "Can't find avaliable port",
-    ))
-}
-
 impl UDPServer {
     pub async fn new(addr: &SocketAddr, config: UDPServerConfig) -> Result<Self> {
         let inner = Inner::new();
         let (event_send, event_recv) = mpsc::channel::<Event>(100);
-        let (local_addr, socket) = if config.find_free_port {
-            find_port(*addr).await?
-        } else {
-            (*addr, create_socket(addr).await?)
+        let (local_addr, socket) = {
+            let socket = create_socket(addr).await?;
+            (socket.local_addr()?, socket)
         };
         let (packet_tx, packet_rx) = packet_stream(socket);
         let peer_manager = PeerManager::new(packet_tx.clone(), config.ignore_idle);
@@ -241,14 +224,8 @@ impl UDPServerBuilder {
     pub fn new() -> UDPServerBuilder {
         UDPServerBuilder(UDPServerConfig {
             ignore_idle: false,
-            find_free_port: false,
             auth_provider: None,
         })
-    }
-    #[allow(dead_code)]
-    pub fn find_free_port(mut self, v: bool) -> Self {
-        self.0.find_free_port = v;
-        self
     }
     pub fn ignore_idle(mut self, v: bool) -> Self {
         self.0.ignore_idle = v;
@@ -271,12 +248,11 @@ mod test {
     use crate::test::{client_connect, make_packet, make_server, recv_packet};
     use smoltcp::wire::*;
 
-    const ADDR: &'static str = "127.0.0.1:12121";
+    const ADDR: &'static str = "127.0.0.1:0";
 
     #[tokio::test]
     async fn test_get_plugin() {
         let udp_server = UDPServerBuilder::new()
-            .find_free_port(true)
             .build(&ADDR.parse().unwrap())
             .await
             .unwrap();
