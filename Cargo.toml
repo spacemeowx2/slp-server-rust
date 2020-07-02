@@ -11,6 +11,7 @@ default = ["ldn_mitm"]
 ldn_mitm = []
 
 [dependencies]
+udp-listener = "0.1"
 anyhow = "1.0"
 log = "0.4.8"
 env_logger = "0.6.2"
@@ -39,10 +40,6 @@ winapi = { version = "0.3", features = ["mswsock", "winsock2"] }
 
 [dev-dependencies]
 bencher = "0.1.5"
-
-[patch.crates-io]
-async-graphql = { git = "https://github.com/spacemeowx2/async-graphql.git", rev = "52599e2b0040ae9a8953c9c071eb059c41200283" }
-async-graphql-warp = { git = "https://github.com/spacemeowx2/async-graphql.git", rev = "52599e2b0040ae9a8953c9c071eb059c41200283" }
 
 [[bench]]
 name = "udp_server"

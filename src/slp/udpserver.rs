@@ -13,8 +13,8 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use anyhow::Result;
-use tokio::sync::{broadcast, mpsc, Mutex};
-use tokio::net::udp::{SendHalf, RecvHalf};
+use tokio::sync::Mutex;
+use udp_listener::{UdpListener, UdpStream};
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
 
@@ -35,34 +35,25 @@ pub struct UDPServerConfig {
     auth_provider: Option<BoxedAuthProvider>,
 }
 
-struct Endpoint<'a> {
-    server: &'a UDPServer,
-}
-
 struct UDPServer {
-    rx: Mutex<RecvHalf>,
-    tx: Mutex<SendHalf>,
+    listener: Mutex<UdpListener>,
 }
 
 impl UDPServer {
     pub async fn new(addr: &SocketAddr, config: UDPServerConfig) -> Result<Self> {
-        let (rx, tx) = create_socket(addr).await?.split();
-        tokio::spawn(async {
-
-        });
+        let socket = create_socket(addr).await?;
+        let listener = UdpListener::from_tokio(socket)?;
         Ok(UDPServer {
-            rx: Mutex::new(rx),
-            tx: Mutex::new(tx),
+            listener: Mutex::new(listener),
         })
     }
     pub async fn serve(&self) -> Result<()> {
-        let mut socket = self.rx.try_lock()?;
+        let mut listener = self.listener.lock().await;
         loop {
-            let mut buf = vec![0u8; 65536];
-            let (size, addr) = socket.recv_from(&mut buf).await?;
-            buf.truncate(size);
-
-            let a = (buf, addr);
+            let peer = listener.next().await?;
+            tokio::spawn(async {
+                println!("Peer");
+            });
         }
     }
 }
