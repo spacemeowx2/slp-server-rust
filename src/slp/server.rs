@@ -120,10 +120,8 @@ impl UDPServer {
                         Event::SendLAN(from, out_packet) => {
                             let (packet, out_addr) = out_packet.split();
                             let addrs = peer_manager.get_dest_sockaddr(from, out_addr).await;
-                            let mut should_drop = false;
                             for (_, p) in &mut inner.lock().await.plugin {
-                                should_drop = should_drop || p.out_packet(&packet, &addrs).await.is_err();
-                                if should_drop {
+                                if p.out_packet(&packet, &addrs).await.is_err() {
                                     return;
                                 }
                             }
@@ -167,10 +165,8 @@ impl UDPServer {
                 let event_send = event_send.clone();
                 async move {
                     let addr = *in_packet.addr();
-                    let mut should_drop = false;
                     for (_, p) in &mut inner.lock().await.plugin {
-                        should_drop = should_drop || p.in_packet(&in_packet).await.is_err();
-                        if should_drop {
+                        if p.in_packet(&in_packet).await.is_err() {
                             return
                         }
                     }
