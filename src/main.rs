@@ -45,6 +45,9 @@ struct Opt {
     /// Don't send broadcast to idle clients
     #[structopt(short, long)]
     ignore_idle: bool,
+    /// Block rules
+    #[structopt(short, long, default_value = "tcp:5000,tcp:21", use_delimiter = true)]
+    block_rules: Vec<plugin::blocker::Rule>,
 }
 
 #[derive(Serialize)]
@@ -99,6 +102,14 @@ async fn main() -> std::io::Result<()> {
         .build(socket_addr)
         .await?;
     plugin::register_plugins(&udp_server).await;
+    if opt.block_rules.len() > 0 {
+        log::info!("Applying {} rules", opt.block_rules.len());
+        log::debug!("rules: {:?}", opt.block_rules);
+        udp_server.get_plugin(
+            &plugin::blocker::BLOCKER_TYPE,
+            |b| b.map(|b| b.set_block_rules(opt.block_rules.clone()))
+        ).await;
+    }
 
     let context = Ctx::new(udp_server, opt.admin_token);
 

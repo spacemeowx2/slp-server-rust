@@ -48,7 +48,7 @@ impl Query {
         if Some(token) == ctx.config.admin_token {
             let r = ctx
                 .udp_server
-                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(Clone::clone))
+                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(|t| t.clone()))
                 .await
                 .ok_or("This plugin is not available")?;
             Ok(r.traffic_info().await)
@@ -93,7 +93,7 @@ impl Subscription {
         if Some(token) == context.config.admin_token {
             let r = context
                 .udp_server
-                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(Clone::clone))
+                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(|t| t.clone()))
                 .await
                 .ok_or("This plugin is not available")?;
             Ok(r.traffic_info_stream().await)

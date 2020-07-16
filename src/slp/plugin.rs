@@ -22,8 +22,8 @@ pub type BoxPluginType<T = BoxPlugin> = Box<dyn PluginType<T> + Send + Sync + 's
 
 #[async_trait]
 pub trait Plugin: Downcast {
-    async fn in_packet(&mut self, packet: &InPacket);
-    async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]);
+    async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()>;
+    async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) -> Result<(), ()>;
 }
 impl_downcast!(Plugin);
 

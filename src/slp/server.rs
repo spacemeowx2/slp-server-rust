@@ -120,8 +120,12 @@ impl UDPServer {
                         Event::SendLAN(from, out_packet) => {
                             let (packet, out_addr) = out_packet.split();
                             let addrs = peer_manager.get_dest_sockaddr(from, out_addr).await;
+                            let mut should_drop = false;
                             for (_, p) in &mut inner.lock().await.plugin {
-                                p.out_packet(&packet, &addrs).await;
+                                should_drop = should_drop || p.out_packet(&packet, &addrs).await.is_err();
+                                if should_drop {
+                                    return;
+                                }
                             }
                             log_warn(
                                 peer_manager.send_lan(packet, addrs).await,
@@ -163,8 +167,12 @@ impl UDPServer {
                 let event_send = event_send.clone();
                 async move {
                     let addr = *in_packet.addr();
+                    let mut should_drop = false;
                     for (_, p) in &mut inner.lock().await.plugin {
-                        p.in_packet(&in_packet).await;
+                        should_drop = should_drop || p.in_packet(&in_packet).await.is_err();
+                        if should_drop {
+                            return
+                        }
                     }
                     let frame = match ForwarderFrame::parse(in_packet.as_ref()) {
                         Ok(f) => f,
@@ -212,11 +220,11 @@ impl UDPServer {
     pub async fn get_plugin<'a, T, F, R>(&'a self, typ: &BoxPluginType<T>, func: F) -> R
     where
         T: 'static,
-        F: Fn(Option<&T>) -> R,
+        F: Fn(Option<&mut T>) -> R,
     {
-        let inner = self.inner.lock().await;
-        let plugin = inner.plugin.get(&typ.name()).unwrap();
-        func(plugin.as_any().downcast_ref::<T>())
+        let mut inner = self.inner.lock().await;
+        let plugin = inner.plugin.get_mut(&typ.name()).unwrap();
+        func(plugin.as_any_mut().downcast_mut::<T>())
     }
     #[allow(dead_code)]
     pub fn local_addr(&self) -> &SocketAddr {
@@ -275,7 +283,7 @@ mod test {
             .unwrap();
         plugin::register_plugins(&udp_server).await;
         let traffic = udp_server
-            .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(Clone::clone))
+            .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(|t| t.clone()))
             .await;
         assert!(traffic.is_some(), true);
     }

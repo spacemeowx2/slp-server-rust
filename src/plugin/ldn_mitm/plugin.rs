@@ -77,8 +77,8 @@ impl LdnMitm {
 
 #[async_trait]
 impl Plugin for LdnMitm {
-    async fn in_packet(&mut self, packet: &InPacket) {
-        let _packet = match ForwarderFrame::parse(packet.as_ref()) {
+    async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()> {
+        let packet = match ForwarderFrame::parse(packet.as_ref()) {
             Ok(ForwarderFrame::Ipv4(ipv4)) => {
                 let src_ip = ipv4.src_ip();
                 let dst_ip = ipv4.dst_ip();
@@ -92,32 +92,32 @@ impl Plugin for LdnMitm {
             }
             _ => None,
         };
-        match _packet {
+        match packet {
             Some((src_ip, dst_ip, packet)) if dst_ip == SERVER_ADDR => {
                 let mut packet = match Ipv4Packet::new_checked(packet) {
                     Ok(p) => p,
-                    _ => return,
+                    _ => return Ok(()),
                 };
                 if packet.protocol() != IpProtocol::Udp {
-                    return;
+                    return Ok(());
                 }
                 let payload = packet.payload_mut();
                 let mut packet = match UdpPacket::new_checked(payload) {
                     Ok(p) => p,
-                    _ => return,
+                    _ => return Ok(()),
                 };
                 let payload = packet.payload_mut();
 
                 let packet = match LdnPacket::new(payload) {
                     Ok(p) => p,
-                    _ => return,
+                    _ => return Ok(()),
                 };
                 if packet.typ() != 1 {
-                    return;
+                    return Ok(());
                 }
                 let info = match NetworkInfo::new(packet.payload()) {
                     Ok(info) => info,
-                    _ => return,
+                    _ => return Ok(()),
                 };
                 let nodes: Vec<_> = info
                     .nodes()
@@ -145,9 +145,12 @@ impl Plugin for LdnMitm {
                 );
             }
             _ => (),
-        }
+        };
+        Ok(())
     }
-    async fn out_packet(&mut self, _packet: &Packet, _addrs: &[SocketAddr]) {}
+    async fn out_packet(&mut self, _packet: &Packet, _addrs: &[SocketAddr]) -> Result<(), ()> {
+        Ok(())
+    }
 }
 
 pub struct LdnMitmType;

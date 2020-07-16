@@ -110,11 +110,13 @@ impl Traffic {
 
 #[async_trait]
 impl Plugin for Traffic {
-    async fn in_packet(&mut self, packet: &InPacket) {
-        self.0.in_packet(packet).await
+    async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()> {
+        self.0.in_packet(packet).await;
+        Ok(())
     }
-    async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) {
-        self.0.out_packet(packet, addrs).await
+    async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) -> Result<(), ()> {
+        self.0.out_packet(packet, addrs).await;
+        Ok(())
     }
 }
 
