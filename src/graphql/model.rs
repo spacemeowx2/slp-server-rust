@@ -39,12 +39,12 @@ pub struct Query;
 #[Object]
 impl Query {
     /// Infomation about this server
-    async fn server_info(&self, ctx: &Context<'_>) -> ServerInfo {
-        ctx.data::<Ctx>().udp_server.server_info().await
+    async fn server_info(&self, ctx: &Context<'_>) -> FieldResult<ServerInfo> {
+        Ok(ctx.data::<Ctx>()?.udp_server.server_info().await)
     }
     /// Traffic infomation last second
     async fn traffic_info(&self, ctx: &Context<'_>, token: String) -> FieldResult<TrafficInfo> {
-        let ctx = ctx.data::<Ctx>();
+        let ctx = ctx.data::<Ctx>()?;
         if Some(token) == ctx.config.admin_token {
             let r = ctx
                 .udp_server
@@ -58,7 +58,7 @@ impl Query {
     }
     /// Current rooms
     async fn room(&self, ctx: &Context<'_>) -> FieldResult<Vec<RoomInfo>> {
-        let ctx = ctx.data::<Ctx>();
+        let ctx = ctx.data::<Ctx>()?;
         let r = ctx
             .udp_server
             .get_plugin(&LDN_MITM_TYPE, |ldn_mitm| ldn_mitm.map(|i| i.room_info()))
@@ -77,10 +77,10 @@ pub struct Subscription;
 #[Subscription]
 impl Subscription {
     /// Infomation about this server
-    async fn server_info(&self, context: &Context<'_>) -> ServerInfoStream {
-        let context = context.data::<Ctx>().clone();
+    async fn server_info(&self, context: &Context<'_>) -> FieldResult<ServerInfoStream> {
+        let context = context.data::<Ctx>()?.clone();
 
-        context.udp_server.server_info_stream().await
+        Ok(context.udp_server.server_info_stream().await)
     }
     /// Traffic infomation last second
     async fn traffic_info(
@@ -88,7 +88,7 @@ impl Subscription {
         context: &Context<'_>,
         token: String,
     ) -> FieldResult<TrafficInfoStream> {
-        let context = context.data::<Ctx>().clone();
+        let context = context.data::<Ctx>()?.clone();
 
         if Some(token) == context.config.admin_token {
             let r = context
