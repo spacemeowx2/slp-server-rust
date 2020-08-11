@@ -7,6 +7,10 @@
 
 ## Usage
 
+Goto release page: https://github.com/spacemeowx2/slp-server-rust/releases, grab the latest release, and run it.
+
+## Build from source
+
 1. Install [`rustup`](https://rustup.rs/) first, and make sure using the latest stable rust version.
 
 2. cargo run
