@@ -9,7 +9,7 @@ OUT="${REPO}/out"
 
 ## CONFIG
 # The containerized build system to use
-SRC_IMAGE='ekidd/rust-musl-builder:1.44.0'
+SRC_IMAGE='ekidd/rust-musl-builder:1.49.0'
 # The tag to use for the resulting image
 TAG=latest
 # Whether to keep the resulting binary or not
