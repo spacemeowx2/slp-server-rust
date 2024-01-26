@@ -99,7 +99,7 @@ impl Plugin for LdnMitmPlugin {
                     Ok(p) => p,
                     _ => return Ok(()),
                 };
-                if packet.protocol() != IpProtocol::Udp {
+                if packet.next_header() != IpProtocol::Udp {
                     return Ok(());
                 }
                 let payload = packet.payload_mut();

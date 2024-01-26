@@ -79,8 +79,8 @@ impl BlockerPlugin {
 impl Protocol {
     fn hit<P: AsRef<[u8]>>(&self, packet: &Ipv4Packet<P>) -> bool {
         match self {
-            Protocol::Tcp => return packet.protocol() == IpProtocol::Tcp,
-            Protocol::Udp => return packet.protocol() == IpProtocol::Udp,
+            Protocol::Tcp => return packet.next_header() == IpProtocol::Tcp,
+            Protocol::Udp => return packet.next_header() == IpProtocol::Udp,
         };
     }
 }
