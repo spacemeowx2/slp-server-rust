@@ -6,7 +6,7 @@ use super::{
     stream::spawn_stream,
     Event, InPacket, Packet,
 };
-use crate::util::FilterSameExt;
+use crate::util::{create_socket, FilterSameExt};
 use async_graphql::SimpleObject;
 use futures::prelude::*;
 use futures::stream::{BoxStream, StreamExt};
@@ -60,7 +60,7 @@ pub struct UDPServer {
 async fn find_port(mut addr: SocketAddr) -> Result<(SocketAddr, UdpSocket)> {
     for port in addr.port()..65535 {
         addr.set_port(port);
-        match UdpSocket::bind(&addr).await {
+        match create_socket(&addr).await {
             Ok(l) => return Ok((addr, l)),
             _ => continue,
         }
@@ -78,7 +78,7 @@ impl UDPServer {
         let (local_addr, socket) = if config.find_free_port {
             find_port(*addr).await?
         } else {
-            (*addr, UdpSocket::bind(addr).await?)
+            (*addr, create_socket(addr).await?)
         };
         let shared_socket = Arc::new(socket);
         let peer_manager = PeerManager::new(shared_socket.clone(), config.ignore_idle);

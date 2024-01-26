@@ -1540,6 +1540,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smoltcp",
+ "socket2",
  "tokio",
  "tokio-stream",
  "tower-http",
