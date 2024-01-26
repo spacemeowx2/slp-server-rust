@@ -8,6 +8,7 @@ pub async fn create_socket(addr: &SocketAddr) -> io::Result<UdpSocket> {
         SocketAddr::V4(_) => Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?,
         SocketAddr::V6(_) => Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?,
     };
+    udp.set_nonblocking(true)?;
 
     // 1MB
     let size = 1 * 1024 * 1024;
