@@ -35,6 +35,15 @@ pub struct Rule {
     dst_port: u16,
 }
 
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.protocol {
+            Protocol::Tcp => write!(f, "tcp:{}", self.dst_port),
+            Protocol::Udp => write!(f, "udp:{}", self.dst_port),
+        }
+    }
+}
+
 impl FromStr for Rule {
     type Err = RuleParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {

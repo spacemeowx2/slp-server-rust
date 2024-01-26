@@ -1,5 +1,3 @@
-use slp_server_rust::{graphql, panic, plugin, slp};
-
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig, ALL_WEBSOCKET_PROTOCOLS};
 use async_graphql_axum::{GraphQLProtocol, GraphQLWebSocket};
 use axum::{
@@ -9,12 +7,17 @@ use axum::{
     routing::{get, post_service},
     Extension, Json, Router,
 };
+use clap::Parser;
 use env_logger::Env;
 use graphql::{schema, Ctx, SlpServerSchema};
 use serde::Serialize;
 use slp::{ServerInfo, UDPServerBuilder};
-use std::net::SocketAddr;
-use structopt::StructOpt;
+use slp_server_rust::{
+    graphql, panic,
+    plugin::{self, blocker::Rule},
+    slp,
+};
+use std::{net::SocketAddr, str::FromStr};
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
@@ -26,8 +29,8 @@ macro_rules! version_string {
     };
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[command(
     name = "slp-server-rust",
     version = version_string!(),
     author = "imspace <spacemeowx2@gmail.com>",
@@ -35,17 +38,17 @@ macro_rules! version_string {
 )]
 struct Opt {
     /// Sets server listening port
-    #[structopt(short, long, default_value = "11451")]
+    #[arg(short, long, default_value_t = 11451)]
     port: u16,
     /// Token for admin query. If not preset, no one can query admin information.
-    #[structopt(long)]
+    #[arg(long)]
     admin_token: Option<String>,
     /// Don't send broadcast to idle clients
-    #[structopt(short, long)]
+    #[arg(short, long)]
     ignore_idle: bool,
     /// Block rules
-    #[structopt(short, long, default_value = "tcp:5000,tcp:21", use_delimiter = true)]
-    block_rules: Vec<plugin::blocker::Rule>,
+    #[arg(short, long, default_values_t = [Rule::from_str("tcp:5000").unwrap(), Rule::from_str("tcp:21").unwrap()])]
+    block_rules: Vec<Rule>,
 }
 
 #[derive(Serialize)]
@@ -102,7 +105,7 @@ async fn main() -> std::io::Result<()> {
         std::process::exit(0);
     });
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     if opt.ignore_idle {
         log::info!("--ignore-idle is not tested, bugs are expected");
