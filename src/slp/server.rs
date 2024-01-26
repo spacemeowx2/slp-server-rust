@@ -129,7 +129,7 @@ impl UDPServer {
                                 }
                             }
                             log_warn(
-                                peer_manager.send_lan(packet, addrs).await,
+                                peer_manager.send_lan(&packet, addrs).await,
                                 "failed to send lan packet",
                             );
                         }

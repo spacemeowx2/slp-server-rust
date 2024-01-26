@@ -59,7 +59,7 @@ impl LdnMitm {
                 let ri = ri.clone();
                 async move {
                     ri.lock().await.clear();
-                    let _ = pm.send_broadcast(PACKET.clone()).await;
+                    let _ = pm.send_broadcast(slp_scan_packet()).await;
                 }
             }),
         );
@@ -156,9 +156,7 @@ impl Plugin for LdnMitm {
 
 pub struct LdnMitmType;
 pub const LDN_MITM_NAME: &str = "ldn_mitm";
-lazy_static! {
-    pub static ref LDN_MITM_TYPE: BoxPluginType<LdnMitm> = Box::new(LdnMitmType);
-}
+pub static LDN_MITM_TYPE: BoxPluginType<LdnMitm> = Box::new(LdnMitmType);
 
 impl PluginType for LdnMitmType {
     fn name(&self) -> String {

@@ -117,9 +117,7 @@ impl Plugin for Traffic {
 pub struct TrafficType;
 pub const TRAFFIC_NAME: &str = "traffic";
 
-lazy_static! {
-    pub static ref TRAFFIC_TYPE: BoxPluginType<Traffic> = Box::new(TrafficType);
-}
+pub static TRAFFIC_TYPE: BoxPluginType<Traffic> = Box::new(TrafficType);
 
 impl PluginType<Traffic> for TrafficType {
     fn name(&self) -> String {

@@ -1,4 +1,4 @@
-use super::{Event, OutAddr, OutPacket, Packet, Peer};
+use super::{Event, OutAddr, Peer};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -59,8 +59,7 @@ impl PeerManager {
             .or_insert_with(|| Peer::new(*addr, event_send.clone()));
         func(peer)
     }
-    pub async fn send_broadcast(&self, packet: OutPacket) -> std::io::Result<usize> {
-        let (packet, _) = packet.split();
+    pub async fn send_broadcast(&self, packet: &[u8]) -> std::io::Result<usize> {
         let addrs = {
             let inner = &mut self.inner.lock();
             inner
@@ -87,7 +86,7 @@ impl PeerManager {
             addrs
         }
     }
-    pub async fn send_lan(&self, packet: Packet, addrs: Vec<SocketAddr>) -> std::io::Result<usize> {
+    pub async fn send_lan(&self, packet: &[u8], addrs: Vec<SocketAddr>) -> std::io::Result<usize> {
         let len = packet.len();
         let size: usize = addrs.len() * len;
         for addr in addrs {

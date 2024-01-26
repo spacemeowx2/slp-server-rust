@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
-
 pub mod graphql;
 pub mod panic;
 pub mod plugin;

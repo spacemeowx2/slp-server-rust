@@ -136,10 +136,7 @@ impl Plugin for Blocker {
 
 pub struct BlockerType;
 pub const BLOCKER_NAME: &str = "blocker";
-
-lazy_static! {
-    pub static ref BLOCKER_TYPE: BoxPluginType<Blocker> = Box::new(BlockerType);
-}
+pub const BLOCKER_TYPE: BoxPluginType<Blocker> = Box::new(BlockerType);
 
 impl PluginType<Blocker> for BlockerType {
     fn name(&self) -> String {

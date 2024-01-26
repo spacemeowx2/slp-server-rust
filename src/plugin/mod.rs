@@ -4,10 +4,11 @@ pub mod ldn_mitm;
 pub mod traffic;
 
 use crate::slp::{BoxPluginType, UDPServer};
-use lazy_static::lazy_static;
+use once_cell::sync::OnceCell;
 
-lazy_static! {
-    static ref PLUGINS: Vec<BoxPluginType> = {
+fn plugins() -> &'static Vec<BoxPluginType> {
+    static PLUGINS: OnceCell<Vec<BoxPluginType>> = OnceCell::new();
+    PLUGINS.get_or_init(|| {
         let mut plugins: Vec<BoxPluginType> = vec![];
         if cfg!(feature = "ldn_mitm") {
             plugins.push(Box::new(ldn_mitm::LdnMitmType));
@@ -15,11 +16,11 @@ lazy_static! {
         plugins.push(Box::new(traffic::TrafficType));
         plugins.push(Box::new(blocker::BlockerType));
         plugins
-    };
+    })
 }
 
 pub async fn register_plugins(server: &UDPServer) {
-    for p in PLUGINS.iter() {
+    for p in plugins().iter() {
         server.add_plugin(p).await;
     }
 }
