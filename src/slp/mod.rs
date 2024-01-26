@@ -10,7 +10,7 @@ pub use frame::{ForwarderFrame, FragParser, Parser};
 pub use packet::{InPacket, OutAddr, OutPacket, Packet};
 pub use peer::{Peer, PeerState};
 pub use peer_manager::{PeerManager, PeerManagerInfo};
-pub use plugin::{BoxPlugin, BoxPluginType};
+pub use plugin::BoxPlugin;
 pub use server::{ServerInfo, UDPServer, UDPServerBuilder};
 pub use std::net::SocketAddr;
 

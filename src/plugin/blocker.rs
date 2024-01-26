@@ -50,14 +50,14 @@ impl FromStr for Rule {
     }
 }
 
-pub struct Blocker {
+pub struct BlockerPlugin {
     frag_parser: FragParser,
     block_rules: Vec<Rule>,
 }
 
-impl Blocker {
+impl BlockerPlugin {
     fn new() -> Self {
-        Blocker {
+        BlockerPlugin {
             frag_parser: FragParser::new(),
             block_rules: vec![],
         }
@@ -98,7 +98,7 @@ impl Rule {
 }
 
 #[async_trait]
-impl Plugin for Blocker {
+impl Plugin for BlockerPlugin {
     async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()> {
         let packet = match ForwarderFrame::parse(packet.as_ref()) {
             Ok(ForwarderFrame::Ipv4(ipv4)) => {
@@ -134,31 +134,15 @@ impl Plugin for Blocker {
     }
 }
 
-pub struct BlockerType;
-pub const BLOCKER_NAME: &str = "blocker";
-pub const BLOCKER_TYPE: BoxPluginType<Blocker> = Box::new(BlockerType);
-
-impl PluginType<Blocker> for BlockerType {
-    fn name(&self) -> String {
-        BLOCKER_NAME.to_string()
-    }
-    fn new(&self, _: Context) -> BoxPlugin {
-        Box::new(Blocker::new())
-    }
-}
-
-impl PluginType for BlockerType {
-    fn name(&self) -> String {
-        BLOCKER_NAME.to_string()
-    }
-    fn new(&self, _: Context) -> BoxPlugin {
-        Box::new(Blocker::new())
+impl PluginType for BlockerPlugin {
+    fn new(_: Context) -> BoxPlugin {
+        Box::new(BlockerPlugin::new())
     }
 }
 
 #[tokio::test]
 async fn get_blocker_from_box() {
-    let p: BoxPlugin = Box::new(Blocker::new());
-    let t = p.as_any().downcast_ref::<Blocker>();
+    let p: BoxPlugin = Box::new(BlockerPlugin::new());
+    let t = p.as_any().downcast_ref::<BlockerPlugin>();
     assert!(t.is_some(), "Blocker should be Some");
 }

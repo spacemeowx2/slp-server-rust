@@ -120,7 +120,7 @@ async fn main() -> std::io::Result<()> {
         log::info!("Applying {} rules", opt.block_rules.len());
         log::debug!("rules: {:?}", opt.block_rules);
         udp_server
-            .get_plugin(&plugin::blocker::BLOCKER_TYPE, |b| {
+            .get_plugin::<plugin::blocker::BlockerPlugin, _, _>(|b| {
                 b.map(|b| b.set_block_rules(opt.block_rules.clone()))
             })
             .await;

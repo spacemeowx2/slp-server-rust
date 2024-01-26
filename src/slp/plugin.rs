@@ -13,12 +13,9 @@ impl<'a> Context<'a> {
     }
 }
 
-pub trait PluginType<T = BoxPlugin> {
-    fn name(&self) -> String;
-    fn new(&self, context: Context) -> BoxPlugin;
+pub trait PluginType {
+    fn new(context: Context) -> BoxPlugin;
 }
-
-pub type BoxPluginType<T = BoxPlugin> = Box<dyn PluginType<T> + Send + Sync + 'static>;
 
 #[async_trait]
 pub trait Plugin: Downcast {

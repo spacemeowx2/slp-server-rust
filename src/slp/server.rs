@@ -2,7 +2,7 @@ use super::{
     frame::{ForwarderFrame, Parser},
     log_warn,
     peer_manager::{PeerManager, PeerManagerInfo},
-    plugin::{BoxPlugin, BoxPluginType, Context},
+    plugin::{BoxPlugin, Context, PluginType},
     stream::spawn_stream,
     Event, InPacket, Packet,
 };
@@ -11,9 +11,9 @@ use async_graphql::SimpleObject;
 use futures::prelude::*;
 use futures::stream::{BoxStream, StreamExt};
 use serde::Serialize;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::{any::TypeId, collections::HashMap};
 use tokio::io::Result;
 use tokio::net::UdpSocket;
 use tokio::sync::{broadcast, mpsc, Mutex};
@@ -38,7 +38,7 @@ pub struct UDPServerConfig {
 }
 
 pub struct Inner {
-    plugin: HashMap<String, BoxPlugin>,
+    plugin: HashMap<TypeId, BoxPlugin>,
 }
 
 impl Inner {
@@ -214,17 +214,24 @@ impl UDPServer {
             .filter_same()
             .boxed()
     }
-    pub async fn add_plugin(&self, typ: &BoxPluginType) {
-        let plugin = typ.new(Context::new(&self.peer_manager));
-        self.inner.lock().await.plugin.insert(typ.name(), plugin);
-    }
-    pub async fn get_plugin<'a, T, F, R>(&'a self, typ: &BoxPluginType<T>, func: F) -> R
+    pub async fn add_plugin<T>(&self)
     where
-        T: 'static,
+        T: PluginType + 'static,
+    {
+        let plugin = T::new(Context::new(&self.peer_manager));
+        self.inner
+            .lock()
+            .await
+            .plugin
+            .insert(TypeId::of::<T>(), plugin);
+    }
+    pub async fn get_plugin<'a, T, F, R>(&'a self, func: F) -> R
+    where
+        T: PluginType + 'static,
         F: Fn(Option<&mut T>) -> R,
     {
         let mut inner = self.inner.lock().await;
-        let plugin = inner.plugin.get_mut(&typ.name()).unwrap();
+        let plugin = inner.plugin.get_mut(&TypeId::of::<T>()).unwrap();
         func(plugin.as_any_mut().downcast_mut::<T>())
     }
     #[allow(dead_code)]
@@ -269,7 +276,7 @@ impl UDPServerBuilder {
 #[cfg(test)]
 mod test {
     use super::UDPServerBuilder;
-    use crate::plugin::{self, traffic::TRAFFIC_TYPE};
+    use crate::plugin::{self, traffic::TrafficPlugin};
     use crate::test::{client_connect, make_packet, make_server, recv_packet};
     use smoltcp::wire::*;
 
@@ -284,7 +291,7 @@ mod test {
             .unwrap();
         plugin::register_plugins(&udp_server).await;
         let traffic = udp_server
-            .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(|t| t.clone()))
+            .get_plugin::<TrafficPlugin, _, _>(|traffic| traffic.map(|t| t.clone()))
             .await;
         assert!(traffic.is_some(), "Traffic should be Some");
     }

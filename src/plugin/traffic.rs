@@ -73,9 +73,9 @@ impl Inner {
 }
 
 #[derive(Clone, Debug)]
-pub struct Traffic(Inner, broadcast::Sender<TrafficInfo>);
+pub struct TrafficPlugin(Inner, broadcast::Sender<TrafficInfo>);
 
-impl Traffic {
+impl TrafficPlugin {
     fn new() -> Self {
         let inner = Inner::new();
 
@@ -103,7 +103,7 @@ impl Traffic {
 }
 
 #[async_trait]
-impl Plugin for Traffic {
+impl Plugin for TrafficPlugin {
     async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()> {
         self.0.in_packet(packet).await;
         Ok(())
@@ -114,32 +114,15 @@ impl Plugin for Traffic {
     }
 }
 
-pub struct TrafficType;
-pub const TRAFFIC_NAME: &str = "traffic";
-
-pub static TRAFFIC_TYPE: BoxPluginType<Traffic> = Box::new(TrafficType);
-
-impl PluginType<Traffic> for TrafficType {
-    fn name(&self) -> String {
-        TRAFFIC_NAME.to_string()
-    }
-    fn new(&self, _: Context) -> BoxPlugin {
-        Box::new(Traffic::new())
-    }
-}
-
-impl PluginType for TrafficType {
-    fn name(&self) -> String {
-        TRAFFIC_NAME.to_string()
-    }
-    fn new(&self, _: Context) -> BoxPlugin {
-        Box::new(Traffic::new())
+impl PluginType for TrafficPlugin {
+    fn new(_: Context) -> BoxPlugin {
+        Box::new(TrafficPlugin::new())
     }
 }
 
 #[tokio::test]
 async fn get_traffic_from_box() {
-    let p: BoxPlugin = Box::new(Traffic::new());
-    let t = p.as_any().downcast_ref::<Traffic>();
+    let p: BoxPlugin = Box::new(TrafficPlugin::new());
+    let t = p.as_any().downcast_ref::<TrafficPlugin>();
     assert!(t.is_some(), "Traffic should be Some");
 }

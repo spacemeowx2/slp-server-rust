@@ -44,13 +44,13 @@ pub struct RoomInfo {
     advertise_data: String,
 }
 
-pub struct LdnMitm {
+pub struct LdnMitmPlugin {
     frag_parser: FragParser,
     room_info: Arc<Mutex<HashMap<Ipv4Addr, RoomInfo>>>,
 }
 
-impl LdnMitm {
-    fn new(peer_manager: PeerManager) -> LdnMitm {
+impl LdnMitmPlugin {
+    fn new(peer_manager: PeerManager) -> LdnMitmPlugin {
         let room_info = Arc::new(Mutex::new(HashMap::new()));
         let ri = room_info.clone();
         tokio::spawn(
@@ -63,21 +63,21 @@ impl LdnMitm {
                 }
             }),
         );
-        LdnMitm {
+        LdnMitmPlugin {
             frag_parser: FragParser::new(),
             room_info,
         }
     }
 }
 
-impl LdnMitm {
+impl LdnMitmPlugin {
     pub fn room_info(&self) -> Arc<Mutex<HashMap<Ipv4Addr, RoomInfo>>> {
         self.room_info.clone()
     }
 }
 
 #[async_trait]
-impl Plugin for LdnMitm {
+impl Plugin for LdnMitmPlugin {
     async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()> {
         let packet = match ForwarderFrame::parse(packet.as_ref()) {
             Ok(ForwarderFrame::Ipv4(ipv4)) => {
@@ -154,24 +154,8 @@ impl Plugin for LdnMitm {
     }
 }
 
-pub struct LdnMitmType;
-pub const LDN_MITM_NAME: &str = "ldn_mitm";
-pub static LDN_MITM_TYPE: BoxPluginType<LdnMitm> = Box::new(LdnMitmType);
-
-impl PluginType for LdnMitmType {
-    fn name(&self) -> String {
-        "ldn_mitm".to_string()
-    }
-    fn new(&self, context: Context) -> Box<dyn Plugin + Send + 'static> {
-        Box::new(LdnMitm::new(context.peer_manager.clone()))
-    }
-}
-
-impl PluginType<LdnMitm> for LdnMitmType {
-    fn name(&self) -> String {
-        LDN_MITM_NAME.to_string()
-    }
-    fn new(&self, context: Context) -> BoxPlugin {
-        Box::new(LdnMitm::new(context.peer_manager.clone()))
+impl PluginType for LdnMitmPlugin {
+    fn new(context: Context) -> BoxPlugin {
+        Box::new(LdnMitmPlugin::new(context.peer_manager.clone()))
     }
 }

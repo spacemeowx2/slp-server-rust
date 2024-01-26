@@ -1,5 +1,5 @@
-use crate::plugin::ldn_mitm::{RoomInfo, LDN_MITM_TYPE};
-use crate::plugin::traffic::{TrafficInfo, TRAFFIC_TYPE};
+use crate::plugin::ldn_mitm::{LdnMitmPlugin, RoomInfo};
+use crate::plugin::traffic::{TrafficInfo, TrafficPlugin};
 use crate::slp::{ServerInfo, UDPServer};
 use async_graphql::{Context, EmptyMutation, FieldResult, Object, Schema, Subscription};
 use futures::stream::BoxStream;
@@ -47,7 +47,7 @@ impl Query {
         if Some(token) == ctx.config.admin_token {
             let r = ctx
                 .udp_server
-                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(|t| t.clone()))
+                .get_plugin::<TrafficPlugin, _, _>(|traffic| traffic.map(|t| t.clone()))
                 .await
                 .ok_or("This plugin is not available")?;
             Ok(r.traffic_info().await)
@@ -60,7 +60,7 @@ impl Query {
         let ctx = ctx.data::<Ctx>()?;
         let r = ctx
             .udp_server
-            .get_plugin(&LDN_MITM_TYPE, |ldn_mitm| ldn_mitm.map(|i| i.room_info()))
+            .get_plugin::<LdnMitmPlugin, _, _>(|ldn_mitm| ldn_mitm.map(|i| i.room_info()))
             .await
             .ok_or("This plugin is not available")?;
         let r = r.lock().await;
@@ -92,7 +92,7 @@ impl Subscription {
         if Some(token) == context.config.admin_token {
             let r = context
                 .udp_server
-                .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(|t| t.clone()))
+                .get_plugin::<TrafficPlugin, _, _>(|traffic| traffic.map(|t| t.clone()))
                 .await
                 .ok_or("This plugin is not available")?;
             Ok(r.traffic_info_stream().await)
