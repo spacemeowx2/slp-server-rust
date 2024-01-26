@@ -1,7 +1,7 @@
+pub mod blocker;
 #[cfg(feature = "ldn_mitm")]
 pub mod ldn_mitm;
 pub mod traffic;
-pub mod blocker;
 
 use crate::slp::{BoxPluginType, UDPServer};
 use lazy_static::lazy_static;

@@ -1,6 +1,10 @@
 use super::{
-    log_warn, spawn_stream, BoxPlugin, BoxPluginType, Context, Event, ForwarderFrame, Packet,
-    Parser, PeerManager, PeerManagerInfo,
+    frame::{ForwarderFrame, Parser},
+    log_warn,
+    peer_manager::{PeerManager, PeerManagerInfo},
+    plugin::{BoxPlugin, BoxPluginType, Context},
+    stream::spawn_stream,
+    Event, Packet,
 };
 use super::{packet_stream, PacketReceiver, PacketSender};
 use crate::util::{create_socket, FilterSameExt};
@@ -14,12 +18,12 @@ use std::sync::Arc;
 use tokio::io::Result;
 use tokio::net::UdpSocket;
 use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 
 type ServerInfoStream = BoxStream<'static, ServerInfo>;
 
 /// Infomation about this server
-#[SimpleObject]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ServerInfo {
     /// The number of online clients
     online: i32,
@@ -108,7 +112,7 @@ impl UDPServer {
         event_recv: mpsc::Receiver<Event>,
         peer_manager: &PeerManager,
     ) {
-        event_recv
+        ReceiverStream::new(event_recv)
             .for_each_concurrent(4, |event| {
                 let inner = inner.clone();
                 let peer_manager = peer_manager.clone();
@@ -157,7 +161,7 @@ impl UDPServer {
         peer_manager: &PeerManager,
         event_send: &mpsc::Sender<Event>,
     ) {
-        packet_rx
+        ReceiverStream::new(packet_rx)
             .for_each_concurrent(10, |in_packet| {
                 let inner = inner.clone();
                 let peer_manager = peer_manager.clone();
@@ -167,7 +171,7 @@ impl UDPServer {
                     let addr = *in_packet.addr();
                     for (_, p) in &mut inner.lock().await.plugin {
                         if p.in_packet(&in_packet).await.is_err() {
-                            return
+                            return;
                         }
                     }
                     let frame = match ForwarderFrame::parse(in_packet.as_ref()) {
@@ -198,9 +202,7 @@ impl UDPServer {
         server_info_from_peer(&self.peer_manager).await
     }
     pub async fn server_info_stream(&self) -> ServerInfoStream {
-        let stream = self
-            .info_sender
-            .subscribe()
+        let stream = BroadcastStream::new(self.info_sender.subscribe())
             .take_while(|info| future::ready(info.is_ok()))
             .map(|info| info.unwrap());
 
@@ -281,7 +283,7 @@ mod test {
         let traffic = udp_server
             .get_plugin(&TRAFFIC_TYPE, |traffic| traffic.map(|t| t.clone()))
             .await;
-        assert!(traffic.is_some(), true);
+        assert!(traffic.is_some(), "Traffic should be Some");
     }
 
     #[tokio::test]

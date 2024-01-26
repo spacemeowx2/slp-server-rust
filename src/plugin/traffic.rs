@@ -1,5 +1,5 @@
 use crate::slp::plugin::*;
-use crate::slp::spawn_stream;
+use crate::slp::stream::spawn_stream;
 use crate::util::FilterSameExt;
 use async_graphql::SimpleObject;
 use futures::prelude::*;
@@ -7,10 +7,10 @@ use futures::{future, stream::BoxStream};
 use serde::Serialize;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex};
+use tokio_stream::wrappers::BroadcastStream;
 
 /// Traffic infomation
-#[SimpleObject]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TrafficInfo {
     /// upload bytes last second
     upload: i32,
@@ -95,9 +95,7 @@ impl Traffic {
         self.0.traffic_info().await
     }
     pub async fn traffic_info_stream(&self) -> TrafficInfoStream {
-        let stream = self
-            .1
-            .subscribe()
+        let stream = BroadcastStream::new(self.1.subscribe())
             .take_while(|info| future::ready(info.is_ok()))
             .map(|info| info.unwrap());
 
@@ -149,5 +147,5 @@ impl PluginType for TrafficType {
 async fn get_traffic_from_box() {
     let p: BoxPlugin = Box::new(Traffic::new());
     let t = p.as_any().downcast_ref::<Traffic>();
-    assert!(t.is_some(), true);
+    assert!(t.is_some(), "Traffic should be Some");
 }

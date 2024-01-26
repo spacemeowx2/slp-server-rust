@@ -1,4 +1,4 @@
-pub use super::{InPacket, OutPacket, Packet, PeerManager};
+pub use crate::slp::{InPacket, OutPacket, Packet, PeerManager};
 pub use async_trait::async_trait;
 use downcast_rs::{impl_downcast, Downcast};
 pub use std::net::SocketAddr;

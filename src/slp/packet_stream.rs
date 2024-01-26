@@ -7,9 +7,8 @@ pub type PacketSender = mpsc::Sender<SendTo>;
 pub type PacketReceiver = mpsc::Receiver<InPacket>;
 pub type SendError = mpsc::error::SendError<SendTo>;
 
-pub fn packet_stream(mut socket: UdpSocket) -> (PacketSender, PacketReceiver) {
-    // let (mut rx, tx) = socket.split();
-    let (mut in_packet_tx, in_packet_rx) = mpsc::channel::<InPacket>(10);
+pub fn packet_stream(socket: UdpSocket) -> (PacketSender, PacketReceiver) {
+    let (in_packet_tx, in_packet_rx) = mpsc::channel::<InPacket>(10);
     let (out_packet_tx, mut out_packet_rx) = mpsc::channel::<SendTo>(10);
     tokio::spawn(async move {
         loop {

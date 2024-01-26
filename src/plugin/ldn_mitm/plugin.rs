@@ -1,7 +1,7 @@
 use super::constants::*;
 use super::lan_protocol::{LdnPacket, NetworkInfo};
+use crate::slp::frame::{ForwarderFrame, FragParser, Parser};
 use crate::slp::plugin::*;
-use crate::slp::{ForwarderFrame, FragParser, Parser};
 use async_graphql::SimpleObject;
 use futures::prelude::*;
 use serde::Serialize;
@@ -11,10 +11,10 @@ use std::net::Ipv4Addr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{interval, Duration};
+use tokio_stream::wrappers::IntervalStream;
 
 /// Node infomation
-#[SimpleObject]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct NodeInfo {
     ip: String,
     node_id: i32,
@@ -22,8 +22,7 @@ pub struct NodeInfo {
     player_name: String,
 }
 /// Room infomation
-#[SimpleObject]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct RoomInfo {
     /// the ip of room
     ip: String,
@@ -54,14 +53,16 @@ impl LdnMitm {
     fn new(peer_manager: PeerManager) -> LdnMitm {
         let room_info = Arc::new(Mutex::new(HashMap::new()));
         let ri = room_info.clone();
-        tokio::spawn(interval(Duration::from_secs(5)).for_each(move |_| {
-            let pm = peer_manager.clone();
-            let ri = ri.clone();
-            async move {
-                ri.lock().await.clear();
-                let _ = pm.send_broadcast(PACKET.clone()).await;
-            }
-        }));
+        tokio::spawn(
+            IntervalStream::new(interval(Duration::from_secs(5))).for_each(move |_| {
+                let pm = peer_manager.clone();
+                let ri = ri.clone();
+                async move {
+                    ri.lock().await.clear();
+                    let _ = pm.send_broadcast(PACKET.clone()).await;
+                }
+            }),
+        );
         LdnMitm {
             frag_parser: FragParser::new(),
             room_info,

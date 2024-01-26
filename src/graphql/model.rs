@@ -1,8 +1,7 @@
 use crate::plugin::ldn_mitm::{RoomInfo, LDN_MITM_TYPE};
 use crate::plugin::traffic::{TrafficInfo, TRAFFIC_TYPE};
 use crate::slp::{ServerInfo, UDPServer};
-use async_graphql::*;
-use async_graphql::{Context, EmptyMutation, FieldResult};
+use async_graphql::{Context, EmptyMutation, FieldResult, Object, Schema, Subscription};
 use futures::stream::BoxStream;
 use std::sync::Arc;
 
@@ -103,9 +102,9 @@ impl Subscription {
     }
 }
 
-type RootSchema = Schema<Query, EmptyMutation, Subscription>;
+pub type SlpServerSchema = Schema<Query, EmptyMutation, Subscription>;
 
-pub fn schema(ctx: &Ctx) -> RootSchema {
+pub fn schema(ctx: &Ctx) -> SlpServerSchema {
     Schema::build(Query, EmptyMutation, Subscription)
         .data(ctx.clone())
         .finish()

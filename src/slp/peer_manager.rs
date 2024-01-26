@@ -63,7 +63,7 @@ impl PeerManager {
         let (packet, _) = packet.split();
         let len = packet.len();
         let inner = &mut self.inner.write().await;
-        let mut packet_tx = inner.packet_tx.clone();
+        let packet_tx = inner.packet_tx.clone();
         let addrs = inner
             .cache
             .iter()
@@ -97,7 +97,7 @@ impl PeerManager {
         let len = packet.len();
         let size: usize = addrs.len() * len;
         let inner = &mut self.inner.write().await;
-        let mut packet_tx = inner.packet_tx.clone();
+        let packet_tx = inner.packet_tx.clone();
         packet_tx.send((packet, addrs)).await?;
         Ok(size)
     }

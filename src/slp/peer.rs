@@ -41,7 +41,7 @@ impl Peer {
     pub fn new(addr: SocketAddr, event_send: mpsc::Sender<Event>) -> Self {
         let (tx, rx) = mpsc::channel::<InPacket>(10);
         tokio::spawn(async move {
-            let mut exit_send = event_send.clone();
+            let exit_send = event_send.clone();
             let _ = Self::do_packet(PeerInner {
                 rx,
                 addr,
@@ -87,7 +87,7 @@ impl Peer {
         let PeerInner {
             mut rx,
             addr,
-            mut event_send,
+            event_send,
         } = inner;
         loop {
             let packet = match timeout(Duration::from_secs(30), rx.recv()).await {

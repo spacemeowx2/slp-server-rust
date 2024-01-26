@@ -24,7 +24,7 @@ impl FromStr for Protocol {
         match s.to_ascii_lowercase().as_str() {
             "tcp" => Ok(Protocol::Tcp),
             "udp" => Ok(Protocol::Udp),
-            _ => Err(RuleParseError("invalid protocol".to_string()))
+            _ => Err(RuleParseError("invalid protocol".to_string())),
         }
     }
 }
@@ -40,14 +40,13 @@ impl FromStr for Rule {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<_> = s.splitn(2, ':').collect();
         if parts.len() != 2 {
-            return Err(RuleParseError("format error".to_string()))
+            return Err(RuleParseError("format error".to_string()));
         }
         let protocol: Protocol = parts[0].parse()?;
-        let dst_port: u16 = parts[1].parse().map_err(|_| RuleParseError("format error".to_string()))?;
-        Ok(Rule {
-            protocol,
-            dst_port,
-        })
+        let dst_port: u16 = parts[1]
+            .parse()
+            .map_err(|_| RuleParseError("format error".to_string()))?;
+        Ok(Rule { protocol, dst_port })
     }
 }
 
@@ -84,18 +83,14 @@ impl Rule {
         }
 
         let dst_port = match self.protocol {
-            Protocol::Tcp => {
-                match TcpPacket::new_checked(&packet.payload()) {
-                    Ok(p) => p.dst_port(),
-                    Err(_e) => return false,
-                }
-            }
-            Protocol::Udp => {
-                match UdpPacket::new_checked(&packet.payload()) {
-                    Ok(p) => p.dst_port(),
-                    Err(_e) => return false,
-                }
-            }
+            Protocol::Tcp => match TcpPacket::new_checked(&packet.payload()) {
+                Ok(p) => p.dst_port(),
+                Err(_e) => return false,
+            },
+            Protocol::Udp => match UdpPacket::new_checked(&packet.payload()) {
+                Ok(p) => p.dst_port(),
+                Err(_e) => return false,
+            },
         };
 
         dst_port == self.dst_port
@@ -129,7 +124,7 @@ impl Plugin for Blocker {
         };
         for r in &self.block_rules {
             if r.hit(&packet) {
-                return Err(())
+                return Err(());
             }
         }
         Ok(())
@@ -168,5 +163,5 @@ impl PluginType for BlockerType {
 async fn get_blocker_from_box() {
     let p: BoxPlugin = Box::new(Blocker::new());
     let t = p.as_any().downcast_ref::<Blocker>();
-    assert!(t.is_some(), true);
+    assert!(t.is_some(), "Blocker should be Some");
 }
