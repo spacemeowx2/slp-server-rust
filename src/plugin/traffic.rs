@@ -4,9 +4,10 @@ use crate::util::FilterSameExt;
 use async_graphql::SimpleObject;
 use futures::prelude::*;
 use futures::{future, stream::BoxStream};
+use parking_lot::Mutex;
 use serde::Serialize;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
 
 /// Traffic infomation
@@ -53,26 +54,21 @@ impl Inner {
         ))))
     }
     async fn clear_traffic(&mut self) -> TrafficInfo {
-        let mut inner = self.0.lock().await;
+        let mut inner = self.0.lock();
         inner.1 = std::mem::replace(&mut inner.0, TrafficInfo::new());
         inner.1.clone()
     }
     async fn in_packet(&mut self, packet: &InPacket) {
-        self.0
-            .lock()
-            .await
-            .0
-            .on_download(packet.as_ref().len() as i32)
+        self.0.lock().0.on_download(packet.as_ref().len() as i32)
     }
     async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) {
         self.0
             .lock()
-            .await
             .0
             .on_upload((packet.len() * addrs.len()) as i32)
     }
     async fn traffic_info(&self) -> TrafficInfo {
-        self.0.lock().await.0.clone()
+        self.0.lock().0.clone()
     }
 }
 

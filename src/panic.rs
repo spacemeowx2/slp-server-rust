@@ -2,7 +2,7 @@ use std::panic;
 
 use backtrace::Backtrace;
 
-pub(crate) fn set_panic_hook() {
+pub fn set_panic_hook() {
     panic::set_hook(Box::new(|panic_info| {
         let payload = panic_info
             .payload()

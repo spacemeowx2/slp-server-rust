@@ -4,9 +4,8 @@ use super::{
     peer_manager::{PeerManager, PeerManagerInfo},
     plugin::{BoxPlugin, BoxPluginType, Context},
     stream::spawn_stream,
-    Event, Packet,
+    Event, InPacket, Packet,
 };
-use super::{packet_stream, PacketReceiver, PacketSender};
 use crate::util::{create_socket, FilterSameExt};
 use async_graphql::SimpleObject;
 use futures::prelude::*;
@@ -81,10 +80,10 @@ impl UDPServer {
         } else {
             (*addr, create_socket(addr).await?)
         };
-        let (packet_tx, packet_rx) = packet_stream(socket);
-        let peer_manager = PeerManager::new(packet_tx.clone(), config.ignore_idle);
+        let shared_socket = Arc::new(socket);
+        let peer_manager = PeerManager::new(shared_socket.clone(), config.ignore_idle);
 
-        Self::spawn_recv(&inner, &packet_tx, packet_rx, &peer_manager, &event_send);
+        Self::spawn_recv(&inner, shared_socket.clone(), &peer_manager, &event_send);
         Self::spawn_event(&inner, event_recv, &peer_manager);
 
         let info_sender = spawn_stream(&peer_manager, |pm| async move {
@@ -141,62 +140,66 @@ impl UDPServer {
     }
     fn spawn_recv(
         inner: &Arc<Mutex<Inner>>,
-        packet_tx: &PacketSender,
-        packet_rx: PacketReceiver,
+        udp_socket: Arc<UdpSocket>,
         peer_manager: &PeerManager,
         event_send: &mpsc::Sender<Event>,
     ) {
         let inner = inner.clone();
+        let udp_socket = udp_socket.clone();
         let peer_manager = peer_manager.clone();
-        let packet_tx = packet_tx.clone();
         let event_send = event_send.clone();
         tokio::spawn(async move {
-            Self::recv_task(&inner, &packet_tx, packet_rx, &peer_manager, &event_send).await
+            if let Err(e) = Self::recv_task(&inner, udp_socket, &peer_manager, &event_send).await {
+                log::error!("Recv task down: {:?}", e);
+            }
         });
     }
     async fn recv_task(
         inner: &Arc<Mutex<Inner>>,
-        packet_tx: &PacketSender,
-        packet_rx: PacketReceiver,
+        udp_socket: Arc<UdpSocket>,
         peer_manager: &PeerManager,
         event_send: &mpsc::Sender<Event>,
-    ) {
-        ReceiverStream::new(packet_rx)
-            .for_each_concurrent(10, |in_packet| {
-                let inner = inner.clone();
-                let peer_manager = peer_manager.clone();
-                let mut tx = packet_tx.clone();
-                let event_send = event_send.clone();
-                async move {
-                    let addr = *in_packet.addr();
-                    for (_, p) in &mut inner.lock().await.plugin {
-                        if p.in_packet(&in_packet).await.is_err() {
-                            return;
-                        }
-                    }
-                    let frame = match ForwarderFrame::parse(in_packet.as_ref()) {
-                        Ok(f) => f,
-                        Err(_) => return,
-                    };
-                    if let ForwarderFrame::Ping(ping) = &frame {
-                        Self::send_client(&mut tx, vec![addr], ping.build()).await;
-                        return;
-                    }
-                    peer_manager
-                        .peer_mut(&addr, &event_send, move |peer| {
-                            // ignore packet when channel is full
-                            let _ = peer.on_packet(in_packet);
-                        })
-                        .await;
+    ) -> std::io::Result<()> {
+        loop {
+            let mut buf = vec![0u8; 65536];
+            let (size, addr) = udp_socket.recv_from(&mut buf).await?;
+            buf.truncate(size);
+
+            let in_packet = InPacket::new(addr, buf);
+
+            let inner = inner.clone();
+            let peer_manager = peer_manager.clone();
+            let event_send = event_send.clone();
+
+            let addr = *in_packet.addr();
+            for (_, p) in &mut inner.lock().await.plugin {
+                if p.in_packet(&in_packet).await.is_err() {
+                    continue;
                 }
-            })
-            .await
+            }
+            let frame = match ForwarderFrame::parse(in_packet.as_ref()) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            if let ForwarderFrame::Ping(ping) = &frame {
+                Self::send_client(&udp_socket, vec![addr], &ping.build()).await;
+                continue;
+            }
+            peer_manager
+                .peer_mut(&addr, &event_send, move |peer| {
+                    // ignore packet when channel is full
+                    let _ = peer.on_packet(in_packet);
+                })
+                .await;
+        }
     }
-    async fn send_client(socket: &mut PacketSender, addr: Vec<SocketAddr>, packet: Packet) {
-        log_warn(
-            socket.send((packet, addr)).await,
-            "failed to send client packet",
-        );
+    async fn send_client(socket: &UdpSocket, addrs: Vec<SocketAddr>, packet: &Packet) {
+        for addr in addrs {
+            log_warn(
+                socket.send_to(packet, addr).await,
+                "failed to send client packet",
+            );
+        }
     }
     pub async fn server_info(&self) -> ServerInfo {
         server_info_from_peer(&self.peer_manager).await

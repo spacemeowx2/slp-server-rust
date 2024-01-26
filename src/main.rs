@@ -1,13 +1,4 @@
-#[macro_use]
-extern crate lazy_static;
-
-mod graphql;
-mod panic;
-mod plugin;
-mod slp;
-#[cfg(test)]
-mod test;
-mod util;
+use slp_server_rust::{graphql, panic, plugin, slp};
 
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig, ALL_WEBSOCKET_PROTOCOLS};
 use async_graphql_axum::{GraphQLProtocol, GraphQLWebSocket};
