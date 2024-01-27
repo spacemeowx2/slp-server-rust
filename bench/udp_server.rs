@@ -4,7 +4,7 @@ use smoltcp::wire::*;
 use tokio::runtime::{self, Runtime};
 
 fn relay_n(b: &mut Bencher, count: usize, clinet_count: usize) {
-    let mut rt = rt();
+    let rt = rt();
 
     b.iter(|| {
         rt.block_on(async {
@@ -15,7 +15,7 @@ fn relay_n(b: &mut Bencher, count: usize, clinet_count: usize) {
                     Ipv4Address::new(10, 13, 37, 100 + i as u8),
                     Ipv4Address::new(10, 13, 255, 255),
                 );
-                let mut socket = client_connect(addr).await;
+                let socket = client_connect(addr).await;
                 socket.send(&packet).await.unwrap();
                 sockets.push(socket);
             }
@@ -56,9 +56,8 @@ fn broadcast_1000_50(b: &mut Bencher) {
 }
 
 fn rt() -> Runtime {
-    runtime::Builder::new()
-        .threaded_scheduler()
-        .core_threads(4)
+    runtime::Builder::new_multi_thread()
+        .worker_threads(4)
         .enable_all()
         .build()
         .unwrap()

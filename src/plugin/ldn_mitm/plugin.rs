@@ -1,7 +1,7 @@
 use super::constants::*;
 use super::lan_protocol::{LdnPacket, NetworkInfo};
+use crate::slp::frame::{ForwarderFrame, FragParser, Parser};
 use crate::slp::plugin::*;
-use crate::slp::{ForwarderFrame, FragParser, Parser};
 use async_graphql::SimpleObject;
 use futures::prelude::*;
 use serde::Serialize;
@@ -11,10 +11,10 @@ use std::net::Ipv4Addr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{interval, Duration};
+use tokio_stream::wrappers::IntervalStream;
 
 /// Node infomation
-#[SimpleObject]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct NodeInfo {
     ip: String,
     node_id: i32,
@@ -22,8 +22,7 @@ pub struct NodeInfo {
     player_name: String,
 }
 /// Room infomation
-#[SimpleObject]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct RoomInfo {
     /// the ip of room
     ip: String,
@@ -45,38 +44,40 @@ pub struct RoomInfo {
     advertise_data: String,
 }
 
-pub struct LdnMitm {
+pub struct LdnMitmPlugin {
     frag_parser: FragParser,
     room_info: Arc<Mutex<HashMap<Ipv4Addr, RoomInfo>>>,
 }
 
-impl LdnMitm {
-    fn new(peer_manager: PeerManager) -> LdnMitm {
+impl LdnMitmPlugin {
+    fn new(peer_manager: PeerManager) -> LdnMitmPlugin {
         let room_info = Arc::new(Mutex::new(HashMap::new()));
         let ri = room_info.clone();
-        tokio::spawn(interval(Duration::from_secs(5)).for_each(move |_| {
-            let pm = peer_manager.clone();
-            let ri = ri.clone();
-            async move {
-                ri.lock().await.clear();
-                let _ = pm.send_broadcast(PACKET.clone()).await;
-            }
-        }));
-        LdnMitm {
+        tokio::spawn(
+            IntervalStream::new(interval(Duration::from_secs(5))).for_each(move |_| {
+                let pm = peer_manager.clone();
+                let ri = ri.clone();
+                async move {
+                    ri.lock().await.clear();
+                    let _ = pm.send_broadcast(slp_scan_packet()).await;
+                }
+            }),
+        );
+        LdnMitmPlugin {
             frag_parser: FragParser::new(),
             room_info,
         }
     }
 }
 
-impl LdnMitm {
+impl LdnMitmPlugin {
     pub fn room_info(&self) -> Arc<Mutex<HashMap<Ipv4Addr, RoomInfo>>> {
         self.room_info.clone()
     }
 }
 
 #[async_trait]
-impl Plugin for LdnMitm {
+impl Plugin for LdnMitmPlugin {
     async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()> {
         let packet = match ForwarderFrame::parse(packet.as_ref()) {
             Ok(ForwarderFrame::Ipv4(ipv4)) => {
@@ -98,7 +99,7 @@ impl Plugin for LdnMitm {
                     Ok(p) => p,
                     _ => return Ok(()),
                 };
-                if packet.protocol() != IpProtocol::Udp {
+                if packet.next_header() != IpProtocol::Udp {
                     return Ok(());
                 }
                 let payload = packet.payload_mut();
@@ -153,26 +154,8 @@ impl Plugin for LdnMitm {
     }
 }
 
-pub struct LdnMitmType;
-pub const LDN_MITM_NAME: &str = "ldn_mitm";
-lazy_static! {
-    pub static ref LDN_MITM_TYPE: BoxPluginType<LdnMitm> = Box::new(LdnMitmType);
-}
-
-impl PluginType for LdnMitmType {
-    fn name(&self) -> String {
-        "ldn_mitm".to_string()
-    }
-    fn new(&self, context: Context) -> Box<dyn Plugin + Send + 'static> {
-        Box::new(LdnMitm::new(context.peer_manager.clone()))
-    }
-}
-
-impl PluginType<LdnMitm> for LdnMitmType {
-    fn name(&self) -> String {
-        LDN_MITM_NAME.to_string()
-    }
-    fn new(&self, context: Context) -> BoxPlugin {
-        Box::new(LdnMitm::new(context.peer_manager.clone()))
+impl PluginType for LdnMitmPlugin {
+    fn new(context: Context) -> BoxPlugin {
+        Box::new(LdnMitmPlugin::new(context.peer_manager.clone()))
     }
 }

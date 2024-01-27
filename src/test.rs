@@ -11,7 +11,7 @@ pub fn make_packet(src_addr: Ipv4Address, dst_addr: Ipv4Address) -> Vec<u8> {
     let repr = Ipv4Repr {
         src_addr,
         dst_addr,
-        protocol: IpProtocol::Udp,
+        next_header: IpProtocol::Udp,
         payload_len: 0,
         hop_limit: 64,
     };

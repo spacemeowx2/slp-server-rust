@@ -1,26 +1,27 @@
-#[macro_use]
-extern crate lazy_static;
-
-mod graphql;
-mod panic;
-mod plugin;
-mod slp;
-#[cfg(test)]
-mod test;
-mod util;
-
-use async_graphql::{
-    http::{playground_source, GQLResponse, GraphQLPlaygroundConfig},
-    QueryBuilder,
+use async_graphql::http::{playground_source, GraphQLPlaygroundConfig, ALL_WEBSOCKET_PROTOCOLS};
+use async_graphql_axum::{GraphQLProtocol, GraphQLWebSocket};
+use axum::{
+    body::Body,
+    extract::WebSocketUpgrade,
+    response::{Html, IntoResponse, Response},
+    routing::{get, post_service},
+    Extension, Json, Router,
 };
+use clap::Parser;
 use env_logger::Env;
-use graphql::{schema, Ctx};
+use graphql::{schema, Ctx, SlpServerSchema};
 use serde::Serialize;
-use slp::UDPServerBuilder;
-use std::convert::Infallible;
-use std::net::SocketAddr;
-use structopt::StructOpt;
-use warp::{filters::BoxedFilter, http::Method, Filter};
+use slp::{ServerInfo, UDPServerBuilder};
+use slp_server_rust::{
+    graphql, panic,
+    plugin::{self, blocker::Rule},
+    slp,
+};
+use std::{net::SocketAddr, str::FromStr};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::TraceLayer,
+};
 
 macro_rules! version_string {
     () => {
@@ -28,8 +29,8 @@ macro_rules! version_string {
     };
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[command(
     name = "slp-server-rust",
     version = version_string!(),
     author = "imspace <spacemeowx2@gmail.com>",
@@ -37,17 +38,17 @@ macro_rules! version_string {
 )]
 struct Opt {
     /// Sets server listening port
-    #[structopt(short, long, default_value = "11451")]
+    #[arg(short, long, default_value_t = 11451)]
     port: u16,
     /// Token for admin query. If not preset, no one can query admin information.
-    #[structopt(long)]
+    #[arg(long)]
     admin_token: Option<String>,
     /// Don't send broadcast to idle clients
-    #[structopt(short, long)]
+    #[arg(short, long)]
     ignore_idle: bool,
     /// Block rules
-    #[structopt(short, long, default_value = "tcp:5000,tcp:21", use_delimiter = true)]
-    block_rules: Vec<plugin::blocker::Rule>,
+    #[arg(short, long, default_values_t = [Rule::from_str("tcp:5000").unwrap(), Rule::from_str("tcp:21").unwrap()])]
+    block_rules: Vec<Rule>,
 }
 
 #[derive(Serialize)]
@@ -56,18 +57,34 @@ struct Info {
     version: String,
 }
 
-async fn server_info(context: Ctx) -> Result<impl warp::Reply, Infallible> {
-    Ok(warp::reply::json(&context.udp_server.server_info().await))
+async fn server_info(Extension(context): Extension<Ctx>) -> Json<ServerInfo> {
+    Json(context.udp_server.server_info().await)
 }
 
-fn make_state(context: &Ctx) -> BoxedFilter<(Ctx,)> {
-    let ctx = context.clone();
-    warp::any().map(move || ctx.clone()).boxed()
+async fn index_get(
+    Extension(executor): Extension<SlpServerSchema>,
+    protocol: Option<GraphQLProtocol>,
+    upgrade: Option<WebSocketUpgrade>,
+) -> Response<Body> {
+    if let (Some(protocol), Some(upgrade)) = (protocol, upgrade) {
+        let executor = executor.clone();
+
+        let resp = upgrade
+            .protocols(ALL_WEBSOCKET_PROTOCOLS)
+            .on_upgrade(move |stream| GraphQLWebSocket::new(stream, executor, protocol).serve());
+
+        resp.into_response()
+    } else {
+        Html(playground_source(
+            GraphQLPlaygroundConfig::new("/").subscription_endpoint("/"),
+        ))
+        .into_response()
+    }
 }
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::from_env(Env::default().default_filter_or("slp_server_rust=info")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("slp_server_rust=info")).init();
     panic::set_panic_hook();
 
     tokio::spawn(async {
@@ -88,7 +105,7 @@ async fn main() -> std::io::Result<()> {
         std::process::exit(0);
     });
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     if opt.ignore_idle {
         log::info!("--ignore-idle is not tested, bugs are expected");
@@ -105,47 +122,38 @@ async fn main() -> std::io::Result<()> {
     if opt.block_rules.len() > 0 {
         log::info!("Applying {} rules", opt.block_rules.len());
         log::debug!("rules: {:?}", opt.block_rules);
-        udp_server.get_plugin(
-            &plugin::blocker::BLOCKER_TYPE,
-            |b| b.map(|b| b.set_block_rules(opt.block_rules.clone()))
-        ).await;
+        udp_server
+            .get_plugin::<plugin::blocker::BlockerPlugin, _, _>(|b| {
+                b.map(|b| b.set_block_rules(opt.block_rules.clone()))
+            })
+            .await;
     }
 
     let context = Ctx::new(udp_server, opt.admin_token);
 
     log::info!("Listening on {}", bind_address);
 
-    let graphql_filter = async_graphql_warp::graphql(schema(&context)).and_then(
-        |(schema, builder): (_, QueryBuilder)| async move {
-            // 执行查询
-            let resp = builder.execute(&schema).await;
+    let executor = schema(&context);
+    let graphql_service = async_graphql_axum::GraphQL::new(executor.clone());
 
-            // 返回结果
-            Ok::<_, Infallible>(warp::reply::json(&GQLResponse(resp)))
-        },
-    );
-    let graphql_ws_filter = async_graphql_warp::graphql_subscription(schema(&context));
+    let app = Router::new()
+        .route("/", post_service(graphql_service).get(index_get))
+        .route("/info", get(server_info))
+        .layer(Extension(executor))
+        .layer(Extension(context))
+        .layer(TraceLayer::new_for_http())
+        .layer(
+            CorsLayer::new()
+                .allow_headers([
+                    http::header::CONTENT_TYPE,
+                    http::header::HeaderName::from_static("x-apollo-tracing"),
+                ])
+                .allow_methods([http::Method::POST])
+                .allow_origin(Any),
+        );
 
-    let cors = warp::cors()
-        .allow_headers(vec!["content-type", "x-apollo-tracing"])
-        .allow_methods(&[Method::POST])
-        .allow_any_origin();
-
-    let log = warp::log("warp_server");
-    let routes = (warp::path("info")
-        .and(make_state(&context))
-        .and_then(server_info)
-        .or(warp::post().and(graphql_filter))
-        .or(warp::get().and(graphql_ws_filter)))
-    .or(warp::get().map(|| {
-        warp::reply::html(playground_source(
-            GraphQLPlaygroundConfig::new("/").subscription_endpoint("/"),
-        ))
-    }))
-    .with(log)
-    .with(cors);
-
-    warp::serve(routes).run(*socket_addr).await;
+    let listener = tokio::net::TcpListener::bind(socket_addr).await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }

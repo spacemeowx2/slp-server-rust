@@ -24,7 +24,7 @@ impl FromStr for Protocol {
         match s.to_ascii_lowercase().as_str() {
             "tcp" => Ok(Protocol::Tcp),
             "udp" => Ok(Protocol::Udp),
-            _ => Err(RuleParseError("invalid protocol".to_string()))
+            _ => Err(RuleParseError("invalid protocol".to_string())),
         }
     }
 }
@@ -35,30 +35,38 @@ pub struct Rule {
     dst_port: u16,
 }
 
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.protocol {
+            Protocol::Tcp => write!(f, "tcp:{}", self.dst_port),
+            Protocol::Udp => write!(f, "udp:{}", self.dst_port),
+        }
+    }
+}
+
 impl FromStr for Rule {
     type Err = RuleParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<_> = s.splitn(2, ':').collect();
         if parts.len() != 2 {
-            return Err(RuleParseError("format error".to_string()))
+            return Err(RuleParseError("format error".to_string()));
         }
         let protocol: Protocol = parts[0].parse()?;
-        let dst_port: u16 = parts[1].parse().map_err(|_| RuleParseError("format error".to_string()))?;
-        Ok(Rule {
-            protocol,
-            dst_port,
-        })
+        let dst_port: u16 = parts[1]
+            .parse()
+            .map_err(|_| RuleParseError("format error".to_string()))?;
+        Ok(Rule { protocol, dst_port })
     }
 }
 
-pub struct Blocker {
+pub struct BlockerPlugin {
     frag_parser: FragParser,
     block_rules: Vec<Rule>,
 }
 
-impl Blocker {
+impl BlockerPlugin {
     fn new() -> Self {
-        Blocker {
+        BlockerPlugin {
             frag_parser: FragParser::new(),
             block_rules: vec![],
         }
@@ -71,8 +79,8 @@ impl Blocker {
 impl Protocol {
     fn hit<P: AsRef<[u8]>>(&self, packet: &Ipv4Packet<P>) -> bool {
         match self {
-            Protocol::Tcp => return packet.protocol() == IpProtocol::Tcp,
-            Protocol::Udp => return packet.protocol() == IpProtocol::Udp,
+            Protocol::Tcp => return packet.next_header() == IpProtocol::Tcp,
+            Protocol::Udp => return packet.next_header() == IpProtocol::Udp,
         };
     }
 }
@@ -84,18 +92,14 @@ impl Rule {
         }
 
         let dst_port = match self.protocol {
-            Protocol::Tcp => {
-                match TcpPacket::new_checked(&packet.payload()) {
-                    Ok(p) => p.dst_port(),
-                    Err(_e) => return false,
-                }
-            }
-            Protocol::Udp => {
-                match UdpPacket::new_checked(&packet.payload()) {
-                    Ok(p) => p.dst_port(),
-                    Err(_e) => return false,
-                }
-            }
+            Protocol::Tcp => match TcpPacket::new_checked(&packet.payload()) {
+                Ok(p) => p.dst_port(),
+                Err(_e) => return false,
+            },
+            Protocol::Udp => match UdpPacket::new_checked(&packet.payload()) {
+                Ok(p) => p.dst_port(),
+                Err(_e) => return false,
+            },
         };
 
         dst_port == self.dst_port
@@ -103,7 +107,7 @@ impl Rule {
 }
 
 #[async_trait]
-impl Plugin for Blocker {
+impl Plugin for BlockerPlugin {
     async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()> {
         let packet = match ForwarderFrame::parse(packet.as_ref()) {
             Ok(ForwarderFrame::Ipv4(ipv4)) => {
@@ -129,7 +133,7 @@ impl Plugin for Blocker {
         };
         for r in &self.block_rules {
             if r.hit(&packet) {
-                return Err(())
+                return Err(());
             }
         }
         Ok(())
@@ -139,34 +143,15 @@ impl Plugin for Blocker {
     }
 }
 
-pub struct BlockerType;
-pub const BLOCKER_NAME: &str = "blocker";
-
-lazy_static! {
-    pub static ref BLOCKER_TYPE: BoxPluginType<Blocker> = Box::new(BlockerType);
-}
-
-impl PluginType<Blocker> for BlockerType {
-    fn name(&self) -> String {
-        BLOCKER_NAME.to_string()
-    }
-    fn new(&self, _: Context) -> BoxPlugin {
-        Box::new(Blocker::new())
-    }
-}
-
-impl PluginType for BlockerType {
-    fn name(&self) -> String {
-        BLOCKER_NAME.to_string()
-    }
-    fn new(&self, _: Context) -> BoxPlugin {
-        Box::new(Blocker::new())
+impl PluginType for BlockerPlugin {
+    fn new(_: Context) -> BoxPlugin {
+        Box::new(BlockerPlugin::new())
     }
 }
 
 #[tokio::test]
 async fn get_blocker_from_box() {
-    let p: BoxPlugin = Box::new(Blocker::new());
-    let t = p.as_any().downcast_ref::<Blocker>();
-    assert!(t.is_some(), true);
+    let p: BoxPlugin = Box::new(BlockerPlugin::new());
+    let t = p.as_any().downcast_ref::<BlockerPlugin>();
+    assert!(t.is_some(), "Blocker should be Some");
 }

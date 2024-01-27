@@ -2,6 +2,7 @@ use crate::util::FilterSameExt;
 use futures::prelude::*;
 use tokio::sync::broadcast;
 use tokio::time::Duration;
+use tokio_stream::wrappers::IntervalStream;
 
 pub fn spawn_stream<T, F, Fut, Item>(obj: &T, func: F) -> broadcast::Sender<Item>
 where
@@ -15,7 +16,7 @@ where
     let sender = tx.clone();
 
     tokio::spawn(
-        tokio::time::interval(Duration::from_secs(1))
+        IntervalStream::new(tokio::time::interval(Duration::from_secs(1)))
             .then(move |_| {
                 let obj = obj.clone();
                 func(obj)

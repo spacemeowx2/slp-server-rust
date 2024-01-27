@@ -7,21 +7,22 @@ pub fn make_udp(payload: &[u8]) -> Vec<u8> {
     let udp_repr = UdpRepr {
         src_port: LDN_MITM_PORT,
         dst_port: LDN_MITM_PORT,
-        payload,
     };
     let ip_repr = Ipv4Repr {
         src_addr: SERVER_ADDR.into(),
         dst_addr: BROADCAST_ADDR.into(),
-        protocol: IpProtocol::Udp,
-        payload_len: udp_repr.buffer_len(),
+        next_header: IpProtocol::Udp,
+        payload_len: udp_repr.header_len() + payload.len(),
         hop_limit: 64,
     };
-    let mut bytes = vec![0xa5; ip_repr.buffer_len() + udp_repr.buffer_len()];
+    let mut bytes = vec![0xa5; ip_repr.buffer_len() + udp_repr.header_len() + payload.len()];
     let mut udp_packet = UdpPacket::new_unchecked(&mut bytes[ip_repr.buffer_len()..]);
     udp_repr.emit(
         &mut udp_packet,
         &SERVER_ADDR.into(),
         &BROADCAST_ADDR.into(),
+        payload.len(),
+        |e: &mut [u8]| e.copy_from_slice(payload),
         &checksum,
     );
     let mut ip_packet = Ipv4Packet::new_unchecked(&mut bytes);

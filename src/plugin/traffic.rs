@@ -1,16 +1,17 @@
 use crate::slp::plugin::*;
-use crate::slp::spawn_stream;
+use crate::slp::stream::spawn_stream;
 use crate::util::FilterSameExt;
 use async_graphql::SimpleObject;
 use futures::prelude::*;
 use futures::{future, stream::BoxStream};
+use parking_lot::Mutex;
 use serde::Serialize;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
 
 /// Traffic infomation
-#[SimpleObject]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TrafficInfo {
     /// upload bytes last second
     upload: i32,
@@ -53,33 +54,28 @@ impl Inner {
         ))))
     }
     async fn clear_traffic(&mut self) -> TrafficInfo {
-        let mut inner = self.0.lock().await;
+        let mut inner = self.0.lock();
         inner.1 = std::mem::replace(&mut inner.0, TrafficInfo::new());
         inner.1.clone()
     }
     async fn in_packet(&mut self, packet: &InPacket) {
-        self.0
-            .lock()
-            .await
-            .0
-            .on_download(packet.as_ref().len() as i32)
+        self.0.lock().0.on_download(packet.as_ref().len() as i32)
     }
     async fn out_packet(&mut self, packet: &Packet, addrs: &[SocketAddr]) {
         self.0
             .lock()
-            .await
             .0
             .on_upload((packet.len() * addrs.len()) as i32)
     }
     async fn traffic_info(&self) -> TrafficInfo {
-        self.0.lock().await.0.clone()
+        self.0.lock().0.clone()
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Traffic(Inner, broadcast::Sender<TrafficInfo>);
+pub struct TrafficPlugin(Inner, broadcast::Sender<TrafficInfo>);
 
-impl Traffic {
+impl TrafficPlugin {
     fn new() -> Self {
         let inner = Inner::new();
 
@@ -95,9 +91,7 @@ impl Traffic {
         self.0.traffic_info().await
     }
     pub async fn traffic_info_stream(&self) -> TrafficInfoStream {
-        let stream = self
-            .1
-            .subscribe()
+        let stream = BroadcastStream::new(self.1.subscribe())
             .take_while(|info| future::ready(info.is_ok()))
             .map(|info| info.unwrap());
 
@@ -109,7 +103,7 @@ impl Traffic {
 }
 
 #[async_trait]
-impl Plugin for Traffic {
+impl Plugin for TrafficPlugin {
     async fn in_packet(&mut self, packet: &InPacket) -> Result<(), ()> {
         self.0.in_packet(packet).await;
         Ok(())
@@ -120,34 +114,15 @@ impl Plugin for Traffic {
     }
 }
 
-pub struct TrafficType;
-pub const TRAFFIC_NAME: &str = "traffic";
-
-lazy_static! {
-    pub static ref TRAFFIC_TYPE: BoxPluginType<Traffic> = Box::new(TrafficType);
-}
-
-impl PluginType<Traffic> for TrafficType {
-    fn name(&self) -> String {
-        TRAFFIC_NAME.to_string()
-    }
-    fn new(&self, _: Context) -> BoxPlugin {
-        Box::new(Traffic::new())
-    }
-}
-
-impl PluginType for TrafficType {
-    fn name(&self) -> String {
-        TRAFFIC_NAME.to_string()
-    }
-    fn new(&self, _: Context) -> BoxPlugin {
-        Box::new(Traffic::new())
+impl PluginType for TrafficPlugin {
+    fn new(_: Context) -> BoxPlugin {
+        Box::new(TrafficPlugin::new())
     }
 }
 
 #[tokio::test]
 async fn get_traffic_from_box() {
-    let p: BoxPlugin = Box::new(Traffic::new());
-    let t = p.as_any().downcast_ref::<Traffic>();
-    assert!(t.is_some(), true);
+    let p: BoxPlugin = Box::new(TrafficPlugin::new());
+    let t = p.as_any().downcast_ref::<TrafficPlugin>();
+    assert!(t.is_some(), "Traffic should be Some");
 }
