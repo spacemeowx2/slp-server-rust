@@ -14,7 +14,7 @@ impl<'a> Context<'a> {
 }
 
 pub trait PluginType {
-    fn new(context: Context) -> BoxPlugin;
+    fn create(context: Context) -> BoxPlugin;
 }
 
 #[async_trait]

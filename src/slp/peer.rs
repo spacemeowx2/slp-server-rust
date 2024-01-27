@@ -15,16 +15,10 @@ pub enum PeerState {
 
 impl PeerState {
     pub fn is_connected(&self) -> bool {
-        match self {
-            &PeerState::Connected(_) => true,
-            _ => false,
-        }
+        matches!(self, &PeerState::Connected(_))
     }
     pub fn is_idle(&self) -> bool {
-        match self {
-            &PeerState::Idle => true,
-            _ => false,
-        }
+        matches!(self, &PeerState::Idle)
     }
 }
 

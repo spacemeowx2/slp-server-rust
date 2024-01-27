@@ -24,7 +24,7 @@ mod constants {
     pub fn slp_scan_packet() -> &'static [u8] {
         static SLP_SCAN_PACKET: OnceCell<Vec<u8>> = OnceCell::new();
         SLP_SCAN_PACKET.get_or_init(|| {
-            let mut bytes = make_udp(&SCAN_PACKET);
+            let mut bytes = make_udp(SCAN_PACKET);
             bytes.insert(0, 1);
             bytes
         })

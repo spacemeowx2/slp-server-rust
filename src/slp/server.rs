@@ -123,7 +123,7 @@ impl UDPServer {
                         Event::SendLAN(from, out_packet) => {
                             let (packet, out_addr) = out_packet.split();
                             let addrs = peer_manager.get_dest_sockaddr(from, out_addr).await;
-                            for (_, p) in &mut inner.lock().await.plugin {
+                            for p in &mut inner.lock().await.plugin.values_mut() {
                                 if p.out_packet(&packet, &addrs).await.is_err() {
                                     return;
                                 }
@@ -172,7 +172,7 @@ impl UDPServer {
             let event_send = event_send.clone();
 
             let addr = *in_packet.addr();
-            for (_, p) in &mut inner.lock().await.plugin {
+            for p in &mut inner.lock().await.plugin.values_mut() {
                 if p.in_packet(&in_packet).await.is_err() {
                     continue;
                 }
@@ -218,14 +218,14 @@ impl UDPServer {
     where
         T: PluginType + 'static,
     {
-        let plugin = T::new(Context::new(&self.peer_manager));
+        let plugin = T::create(Context::new(&self.peer_manager));
         self.inner
             .lock()
             .await
             .plugin
             .insert(TypeId::of::<T>(), plugin);
     }
-    pub async fn get_plugin<'a, T, F, R>(&'a self, func: F) -> R
+    pub async fn get_plugin<T, F, R>(&self, func: F) -> R
     where
         T: PluginType + 'static,
         F: Fn(Option<&mut T>) -> R,
@@ -250,6 +250,12 @@ pub async fn server_info_from_peer(peer_manager: &PeerManager) -> ServerInfo {
 }
 
 pub struct UDPServerBuilder(UDPServerConfig);
+
+impl Default for UDPServerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl UDPServerBuilder {
     pub fn new() -> UDPServerBuilder {
@@ -280,7 +286,7 @@ mod test {
     use crate::test::{client_connect, make_packet, make_server, recv_packet};
     use smoltcp::wire::*;
 
-    const ADDR: &'static str = "127.0.0.1:12121";
+    const ADDR: &str = "127.0.0.1:12121";
 
     #[tokio::test]
     async fn test_get_plugin() {

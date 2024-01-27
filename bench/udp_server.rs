@@ -20,7 +20,7 @@ fn relay_n(b: &mut Bencher, count: usize, clinet_count: usize) {
                 sockets.push(socket);
             }
             let socket1 = &mut sockets.remove(0);
-            let mut socket2 = &mut sockets.remove(0);
+            let socket2 = &mut sockets.remove(0);
 
             let packet1 = make_packet(
                 Ipv4Address::new(10, 13, 37, 100),
@@ -29,7 +29,7 @@ fn relay_n(b: &mut Bencher, count: usize, clinet_count: usize) {
 
             for _ in 0..count {
                 socket1.send(&packet1).await.unwrap();
-                black_box(recv_packet(&mut socket2).await);
+                black_box(recv_packet(socket2).await);
             }
         });
     });

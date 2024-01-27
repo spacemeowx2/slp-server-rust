@@ -82,9 +82,9 @@ impl<'a> Parser<'a> for ForwarderFrame<'a> {
         let rest = &bytes[1..];
         let frame = match typ {
             forwarder_type::KEEPALIVE => ForwarderFrame::Keepalive,
-            forwarder_type::IPV4 => ForwarderFrame::Ipv4(Ipv4::parse(&rest)?),
-            forwarder_type::PING => ForwarderFrame::Ping(Ping::parse(&rest)?),
-            forwarder_type::IPV4_FRAG => ForwarderFrame::Ipv4Frag(Ipv4Frag::parse(&rest)?),
+            forwarder_type::IPV4 => ForwarderFrame::Ipv4(Ipv4::parse(rest)?),
+            forwarder_type::PING => ForwarderFrame::Ping(Ping::parse(rest)?),
+            forwarder_type::IPV4_FRAG => ForwarderFrame::Ipv4Frag(Ipv4Frag::parse(rest)?),
             forwarder_type::AUTH_ME => ForwarderFrame::AuthMe,
             forwarder_type::INFO => ForwarderFrame::Info,
             _ => return Err(ParseError::NotParseable),
@@ -98,9 +98,9 @@ pub struct Ipv4<'a> {
     payload: &'a [u8],
 }
 
-impl<'a> Into<OutAddr> for Ipv4<'a> {
-    fn into(self) -> OutAddr {
-        OutAddr::new(self.src_ip(), self.dst_ip())
+impl<'a> From<Ipv4<'a>> for OutAddr {
+    fn from(val: Ipv4<'a>) -> Self {
+        OutAddr::new(val.src_ip(), val.dst_ip())
     }
 }
 
@@ -123,7 +123,7 @@ impl<'a> Ipv4<'a> {
         octets.into()
     }
     pub fn data(&self) -> &[u8] {
-        &self.payload
+        self.payload
     }
 }
 
@@ -132,9 +132,9 @@ pub struct Ipv4Frag<'a> {
     payload: &'a [u8],
 }
 
-impl<'a> Into<OutAddr> for Ipv4Frag<'a> {
-    fn into(self) -> OutAddr {
-        OutAddr::new(self.src_ip(), self.dst_ip())
+impl<'a> From<Ipv4Frag<'a>> for OutAddr {
+    fn from(val: Ipv4Frag<'a>) -> Self {
+        OutAddr::new(val.src_ip(), val.dst_ip())
     }
 }
 
@@ -213,7 +213,7 @@ struct FragItem {
 }
 
 impl FragItem {
-    fn from_frame<'a>(frag: Ipv4Frag<'a>) -> Self {
+    fn from_frame(frag: Ipv4Frag<'_>) -> Self {
         FragItem {
             src_ip: frag.src_ip(),
             dst_ip: frag.dst_ip(),
@@ -232,13 +232,19 @@ pub struct FragParser {
     cache: LruCache<FragParserKey, Vec<Option<FragItem>>>,
 }
 
+impl Default for FragParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FragParser {
     pub fn new() -> Self {
         Self {
             cache: LruCache::new(NonZeroUsize::new(50).unwrap()),
         }
     }
-    pub fn process<'a>(&mut self, frame: Ipv4Frag<'a>) -> Option<Packet> {
+    pub fn process(&mut self, frame: Ipv4Frag<'_>) -> Option<Packet> {
         let src_ip = frame.src_ip();
         let item = FragItem::from_frame(frame);
         let key = (src_ip, item.id);

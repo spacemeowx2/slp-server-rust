@@ -119,7 +119,7 @@ async fn main() -> std::io::Result<()> {
         .build(socket_addr)
         .await?;
     plugin::register_plugins(&udp_server).await;
-    if opt.block_rules.len() > 0 {
+    if !opt.block_rules.is_empty() {
         log::info!("Applying {} rules", opt.block_rules.len());
         log::debug!("rules: {:?}", opt.block_rules);
         udp_server

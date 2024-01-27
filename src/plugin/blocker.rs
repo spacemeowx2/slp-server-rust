@@ -79,14 +79,14 @@ impl BlockerPlugin {
 impl Protocol {
     fn hit<P: AsRef<[u8]>>(&self, packet: &Ipv4Packet<P>) -> bool {
         match self {
-            Protocol::Tcp => return packet.next_header() == IpProtocol::Tcp,
-            Protocol::Udp => return packet.next_header() == IpProtocol::Udp,
-        };
+            Protocol::Tcp => packet.next_header() == IpProtocol::Tcp,
+            Protocol::Udp => packet.next_header() == IpProtocol::Udp,
+        }
     }
 }
 
 impl Rule {
-    fn hit<'a, P: AsRef<[u8]>>(&self, packet: &Ipv4Packet<&'a P>) -> bool {
+    fn hit<P: AsRef<[u8]>>(&self, packet: &Ipv4Packet<&P>) -> bool {
         if !self.protocol.hit(packet) {
             return false;
         }
@@ -144,7 +144,7 @@ impl Plugin for BlockerPlugin {
 }
 
 impl PluginType for BlockerPlugin {
-    fn new(_: Context) -> BoxPlugin {
+    fn create(_: Context) -> BoxPlugin {
         Box::new(BlockerPlugin::new())
     }
 }

@@ -47,11 +47,11 @@ impl PeerManager {
     }
     pub async fn remove(&self, addr: &SocketAddr) {
         let cache = &mut self.inner.lock().cache;
-        cache.remove(&addr);
+        cache.remove(addr);
     }
     pub async fn peer_mut<F>(&self, addr: &SocketAddr, event_send: &mpsc::Sender<Event>, func: F)
     where
-        F: FnOnce(&mut Peer) -> (),
+        F: FnOnce(&mut Peer),
     {
         let cache = &mut self.inner.lock().cache;
         let peer = cache
@@ -63,9 +63,7 @@ impl PeerManager {
         let addrs = {
             let inner = &mut self.inner.lock();
             inner
-                .cache
-                .iter()
-                .map(|(addr, _)| *addr)
+                .cache.keys().copied()
                 .collect::<Vec<_>>()
         };
         self.send_lan(packet, addrs).await
@@ -73,7 +71,7 @@ impl PeerManager {
     pub async fn get_dest_sockaddr(&self, from: SocketAddr, out_addr: OutAddr) -> Vec<SocketAddr> {
         let inner = &mut self.inner.lock();
         inner.map.insert(*out_addr.src_ip(), from);
-        if let Some(addr) = inner.map.get(&out_addr.dst_ip()) {
+        if let Some(addr) = inner.map.get(out_addr.dst_ip()) {
             vec![*addr]
         } else {
             let addrs = inner
@@ -91,7 +89,7 @@ impl PeerManager {
         let size: usize = addrs.len() * len;
         for addr in addrs {
             // TODO: handle error
-            let _ = self.udp_socket.send_to(&packet, addr).await;
+            let _ = self.udp_socket.send_to(packet, addr).await;
         }
         Ok(size)
     }

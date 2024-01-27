@@ -23,7 +23,7 @@ pub trait FilterSameExt: StreamExt {
                 Some(x)
             }))
         })
-        .filter_map(|x| future::ready(x))
+        .filter_map(future::ready)
         .boxed()
     }
 }

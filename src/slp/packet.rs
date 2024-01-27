@@ -32,9 +32,9 @@ impl InPacket {
     }
 }
 
-impl Into<Packet> for InPacket {
-    fn into(self) -> Packet {
-        self.0
+impl From<InPacket> for Packet {
+    fn from(val: InPacket) -> Self {
+        val.0
     }
 }
 
@@ -56,9 +56,9 @@ impl OutPacket {
     }
 }
 
-impl Into<Packet> for OutPacket {
-    fn into(self) -> Packet {
-        self.0
+impl From<OutPacket> for Packet {
+    fn from(val: OutPacket) -> Self {
+        val.0
     }
 }
 

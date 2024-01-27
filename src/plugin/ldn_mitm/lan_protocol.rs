@@ -77,14 +77,16 @@ impl<T: AsRef<[u8]>> LdnHeader<T> {
         let data = self.buffer.as_ref();
         let len = data.len();
         if len < field::REVERSED.end {
-            Err(Error::Truncated)
-        } else if self.magic() != 0x11451400 {
-            Err(Error::Truncated)
-        } else if len < self.len() as usize + field::REVERSED.end {
-            Err(Error::Truncated)
-        } else {
-            Ok(())
+            return Err(Error::Truncated);
         }
+        if self.magic() != 0x11451400 {
+            return Err(Error::Truncated);
+        }
+        if len < self.len() as usize + field::REVERSED.end {
+            return Err(Error::Truncated);
+        }
+
+        Ok(())
     }
 }
 
@@ -116,7 +118,7 @@ impl<T: AsRef<[u8]>> NetworkInfo<T> {
     }
     pub fn host_player_name(&self) -> String {
         let data = &self.buffer.as_ref()[0x74..0x74 + 32];
-        let data = data.iter().map(|i| *i).take_while(|i| *i != 0).collect();
+        let data = data.iter().copied().take_while(|i| *i != 0).collect();
         String::from_utf8(data).unwrap_or("".to_string())
     }
     pub fn node_count_max(&self) -> u8 {
@@ -125,7 +127,7 @@ impl<T: AsRef<[u8]>> NetworkInfo<T> {
     pub fn node_count(&self) -> u8 {
         std::cmp::min(self.buffer.as_ref()[0x67], 8)
     }
-    pub fn nodes<'a>(&'a self) -> Vec<NodeInfo<&'a [u8]>> {
+    pub fn nodes(&self) -> Vec<NodeInfo<&[u8]>> {
         let mut out = vec![];
         for i in 0..self.node_count() {
             let start = 0x68 + 0x40 * i as usize;
@@ -139,7 +141,7 @@ impl<T: AsRef<[u8]>> NetworkInfo<T> {
         std::cmp::min(data.get_u16_le(), 384)
     }
     #[allow(dead_code)]
-    pub fn advertise_data<'a>(&'a self) -> &'a [u8] {
+    pub fn advertise_data(&self) -> &[u8] {
         let len = self.advertise_data_len() as usize;
         let start = 0x26C;
         &self.buffer.as_ref()[start..start + len]
@@ -169,7 +171,7 @@ impl<T: AsRef<[u8]>> NodeInfo<T> {
     }
     pub fn player_name(&self) -> String {
         let data = &self.buffer.as_ref()[0xC..0xC + 0x20];
-        let data = data.iter().map(|i| *i).take_while(|i| *i != 0).collect();
+        let data = data.iter().copied().take_while(|i| *i != 0).collect();
         String::from_utf8(data).unwrap_or("".to_string())
     }
 }
@@ -274,12 +276,12 @@ mod test {
 
         assert_eq!(nodes[0].ip(), Ipv4Addr::new(10, 13, 58, 122));
         assert_eq!(nodes[0].node_id(), 0);
-        assert_eq!(nodes[0].is_connected(), true);
+        assert!(nodes[0].is_connected());
         assert_eq!(&nodes[0].player_name(), "Colyo");
 
         assert_eq!(nodes[1].ip(), Ipv4Addr::new(10, 13, 7, 36));
         assert_eq!(nodes[1].node_id(), 1);
-        assert_eq!(nodes[1].is_connected(), true);
+        assert!(nodes[1].is_connected());
         assert_eq!(&nodes[1].player_name(), "shana");
 
         assert_eq!(info.advertise_data_len(), 368);

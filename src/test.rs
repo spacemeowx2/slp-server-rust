@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 use tokio::time::{timeout, Duration};
 
-pub const ADDR: &'static str = "127.0.0.1:12121";
+pub const ADDR: &str = "127.0.0.1:12121";
 
 pub fn make_packet(src_addr: Ipv4Address, dst_addr: Ipv4Address) -> Vec<u8> {
     let repr = Ipv4Repr {
@@ -47,6 +47,6 @@ pub async fn recv_packet(socket: &mut UdpSocket) -> Vec<u8> {
 
 pub async fn client_connect(addr: SocketAddr) -> UdpSocket {
     let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-    let _ = socket.connect(addr).await.unwrap();
+    socket.connect(addr).await.unwrap();
     socket
 }

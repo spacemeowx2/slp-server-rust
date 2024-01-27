@@ -115,7 +115,7 @@ impl Plugin for TrafficPlugin {
 }
 
 impl PluginType for TrafficPlugin {
-    fn new(_: Context) -> BoxPlugin {
+    fn create(_: Context) -> BoxPlugin {
         Box::new(TrafficPlugin::new())
     }
 }

@@ -155,7 +155,7 @@ impl Plugin for LdnMitmPlugin {
 }
 
 impl PluginType for LdnMitmPlugin {
-    fn new(context: Context) -> BoxPlugin {
+    fn create(context: Context) -> BoxPlugin {
         Box::new(LdnMitmPlugin::new(context.peer_manager.clone()))
     }
 }
