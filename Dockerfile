@@ -1,13 +1,13 @@
-FROM ekidd/rust-musl-builder:1.49.0 AS BUILDER
+FROM clux/muslrust:stable AS BUILDER
 
-ADD --chown=rust:rust . ./
+COPY . ./
 
 RUN cargo build --release
 
 FROM alpine:3.11
 
 COPY --from=builder \
-    /home/rust/src/target/x86_64-unknown-linux-musl/release/slp-server-rust \
+    /volume/target/x86_64-unknown-linux-musl/release/slp-server-rust \
     /usr/local/bin/
 
 ENTRYPOINT ["slp-server-rust"]
