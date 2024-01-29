@@ -3,7 +3,7 @@
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 name: Publish
 
@@ -36,7 +36,6 @@ jobs:
 
       - uses: actions-rs/cargo@v1
         with:
-          use-cross: true
           command: build
           args: --release
 
